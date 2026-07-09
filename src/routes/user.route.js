@@ -2,18 +2,17 @@ const express = require('express');
 const router = express.Router();
 const userController = require("../controllers/user.controller");
 const asyncHandler = require("../utils/asyncHandler");
-const id = require("../middlewares/id");
 
 // 1. Get All Users
 router.get('/', asyncHandler(userController.getAll));
 
 // 2. Get User By ID
-router.get('/:id',[id] , asyncHandler(userController.getOne));
+router.get('/:id' , asyncHandler(userController.getOne));
  
 // 3. Update User Role 
-router.put('/:id/role', [id], asyncHandler(userController.updateRole));
+router.put('/:id/role', asyncHandler(userController.updateRole));
 
 // 4. Delete User 
-router.delete('/:id', [id], asyncHandler(userController.remove));
+router.delete('/:id', asyncHandler(userController.remove));
 
 module.exports = router;
