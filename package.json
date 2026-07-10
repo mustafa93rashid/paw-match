@@ -23,5 +23,13 @@
     "morgan": "^1.11.0",
     "nodemon": "^3.1.14",
     "xss": "^1.0.15"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mustafa93rashid/paw-match.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mustafa93rashid/paw-match/issues"
+  },
+  "homepage": "https://github.com/mustafa93rashid/paw-match#readme"
 }
