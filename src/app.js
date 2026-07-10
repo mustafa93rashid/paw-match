@@ -20,7 +20,7 @@ app.use("/api/v1/auth", require("./routes/auth.route"));
 app.use("/api/v1/debug-upload", require("./routes/test-upload.routes"));//this line is just for testin image upload
 
 app.use("/api/v1/user", require("./routes/user.route"));
-
+app.use("/api/v1/animals", require("./routes/animal.route"));
 
 app.use(errorHandler);
 app.use(notFound);
