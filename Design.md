@@ -88,6 +88,8 @@ type: String,
 enum: ["low", "medium", "high"]
 },
 
+isAllergic : Boolean
+
 ownerType: {
 type: String,
 enum: ["single", "family"]
@@ -174,6 +176,7 @@ enum: ["apartment", "house", "farm", "any"]
       enum: ["single", "family", "any"]
     }
 
+isAllergic : Boolean
 },
 
 isActive: {
@@ -198,6 +201,7 @@ address: String,
 city: String,
 latitude: Number,
 longitude: Number,
+employees: [ObjectId]  // ref: users
 
 location: {
 type: { type: String,
@@ -235,6 +239,8 @@ instagram: String,
 website: String
 },
 
+createdBy: ObjectId // ref: users
+
 createdAt: Date,
 updatedAt: Date
 }
@@ -257,21 +263,25 @@ ref: "Shelter"
 },
 
 status: {
-type: String,
-enum: [
-"pendingReview",
-"interview",
-"homeCheck",
-"approved",
-"rejected"
-],
-},
+  type: String,
+  enum: [
+    "pending",
+    "interview",
+    "homeCheck",
+    "approved",
+    "rejected"
+  ]
+}
+
+InterviewDate: Date
+
+InterviewNotes: String
 
 notes: String,
 
 rejectionReason: String,
 
-updatedBy: {
+ReviewedBy: {
 type: ObjectId,
 ref: "User"
 },
@@ -330,6 +340,34 @@ createdAt: Date,
 updatedAt: Date
 }
 
+# Review {
+  userId: {
+    type: ObjectId,
+    ref: "User"
+  },
+
+  shelterId: {
+    type: ObjectId,
+    ref: "Shelter"
+  },
+
+  adoptionRequestId: {
+    type: ObjectId,
+    ref: "AdoptionRequest",
+    unique: true
+  },
+
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5
+  },
+
+  comment: String,
+
+  createdAt: Date,
+  updatedAt: Date
+}
 
 # Realationships
 
@@ -344,6 +382,9 @@ updatedAt: Date
 - User (Adopter) (1) -----> (M) Appointment
 - User (Vet) (1) ---------> (M) Appointment
 - Animal (1) -------------> (M) Appointment
+- User (1) -----------------> (M) Review
+- Shelter (1) --------------> (M) Review
+- AdoptionRequest (1) ------> (1) Review
 
 # ALL RELATIONSHIPS (1:1 & 1:M) THERE IS NO (M:M)
 
