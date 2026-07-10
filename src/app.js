@@ -6,11 +6,13 @@ const cookies = require("cookie-parser");
 const errorHandler = require("./middlewares/errorHandler");
 const notFound = require("./middlewares/notFound");
 const xssSanitize = require("./middlewares/xss");
+const shelterRouter = require("./routes/shelter.route");
 
 app.use(express.json());
 app.use(require("morgan")("dev"));
 app.use(cookies());
 app.use(xssSanitize);
+app.use('/shelters', shelterRouter);
 
 app.get("/api/health", (req, res) => {res.status(200).json("OK")})
 app.use("/api/v1/auth", require("./routes/auth.route"));
