@@ -1,77 +1,105 @@
-const AdopterProfile = require("../models/adopterProfile.model");
+
+const AdopterProfile = require("../models/AdopterProfile");
 
 class AdopterProfileController {
+  getMyProfile = async (req, res) => {
+    const profile = await AdopterProfile.findOne({
+      userId: req.user.id,
+    }).populate(
+      "userId",
+      "firstName lastName email phone dateOfBirth gender address profileImage role",
+    );
 
-  async createProfile(req, res) {
-    try {
-     
-      const { userId, fullName, phoneNumber, address, experienceWithPets, hasOtherPets, householdType } = req.body;
-
-      const existingProfile = await AdopterProfile.findOne({ userId });
-      if (existingProfile) {
-        return res.status(400).json({ message: "Profile already exists for this user." });
-      }
-
-      const newProfile = await AdopterProfile.create({
-        userId,
-        fullName,
-        phoneNumber,
-        address,
-        experienceWithPets,
-        hasOtherPets,
-        householdType,
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "Adopter profile not found",
       });
-
-      return res.status(201).json({
-        message: "Adopter profile created successfully.",
-        data: newProfile,
-      });
-    } catch (error) {
-      return res.status(500).json({ message: "Server error", error: error.message });
     }
-  }
 
+    return res.status(200).json({
+      success: true,
+      message: "Adopter profile retrieved successfully",
+      data: profile,
+    });
+  };
 
-  async getProfileByUserId(req, res) {
-    try {
-      const { userId } = req.params;
-      const profile = await AdopterProfile.findOne({ userId }).populate("userId", "name email"); // جلب بيانات اليوزر مع البروفايل
+  updateMyProfile = async (req, res) => {
+    const allowedFields = [
+      "homeType",
+      "hasKids",
+      "hasOtherPets",
+      "experienceLevel",
+      "dailyActivityLevel",
+      "isAllergic",
+      "ownerType",
+    ];
 
-      if (!profile) {
-        return res.status(404).json({ message: "Adopter profile not found." });
+    const updateData = {};
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
       }
+    });
 
-      return res.status(200).json({
-        message: "Profile fetched successfully.",
-        data: profile,
+    const profile = await AdopterProfile.findOneAndUpdate(
+      {
+        userId: req.user.id,
+      },
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      },
+    ).populate(
+      "userId",
+      "firstName lastName email phone dateOfBirth gender address profileImage role",
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Adopter profile updated successfully",
+      data: profile,
+    });
+  };
+
+  getAllAdopters = async (req, res) => {
+    const profiles = await AdopterProfile.find().populate(
+      "userId",
+      "firstName lastName email phone address profileImage role isActive",
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Adopters retrieved successfully",
+      count: profiles.length,
+      data: profiles,
+    });
+  };
+
+  getAdopterById = async (req, res) => {
+    const profile = await AdopterProfile.findById(req.params.id).populate(
+      "userId",
+      "firstName lastName email phone address profileImage role isActive",
+    );
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "Adopter profile not found",
       });
-    } catch (error) {
-      return res.status(500).json({ message: "Server error", error: error.message });
     }
-  }
 
-  
-  async updateProfile(req, res) {
-    try {
-      const { userId } = req.params;
-      const updatedProfile = await AdopterProfile.findOneAndUpdate(
-        { userId },
-        req.body,
-        { new: true, runValidators: true } 
-      );
+    return res.status(200).json({
+      success: true,
+      message: "Adopter profile retrieved successfully",
+      data: profile,
+    });
+  };
 
-      if (!updatedProfile) {
-        return res.status(404).json({ message: "Adopter profile not found." });
-      }
-
-      return res.status(200).json({
-        message: "Profile updated successfully.",
-        data: updatedProfile,
-      });
-    } catch (error) {
-      return res.status(500).json({ message: "Server error", error: error.message });
-    }
-  }
 }
 
 module.exports = new AdopterProfileController();
