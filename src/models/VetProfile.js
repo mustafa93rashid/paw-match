@@ -40,11 +40,11 @@ const vetProfileSchema = new mongoose.Schema(
       default: [],
     },
 
-    shelterId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Shelter",
-      default: null,
-    },
+    // shelterId: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "Shelter",
+    //   default: null,
+    // },
 
     isActive: {
   type: Boolean,
