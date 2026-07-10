@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(require("morgan")("dev"));
 app.use(cookies());
 app.use(xssSanitize);
-app.use('/shelters', shelterRouter);
+app.use('/api/v1/shelters', shelterRouter);
 
 app.get("/api/health", (req, res) => {res.status(200).json("OK")})
 app.use("/api/v1/auth", require("./routes/auth.route"));
