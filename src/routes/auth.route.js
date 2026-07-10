@@ -8,7 +8,13 @@ const { signupLimiter, signinLimiter } = require("../middlewares/limiter");
 const { signupValidation, signinValidation } = require("../Validation/auth.validate");
 
 
-router.get("/profile", [auth], asyncHandler(authController.profile));
+
+
+router.put("/change-password", [auth], asyncHandler(authController.changePassword));
+
+router.post("/forgot-password", asyncHandler(authController.forgotPassword));
+
+router.post("/reset-password/:token", asyncHandler(authController.resetPassword));
 
 router.post("/signup", [signupLimiter, ...signupValidation], asyncHandler(authController.signup));
 
