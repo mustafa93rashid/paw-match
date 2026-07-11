@@ -13,6 +13,7 @@
   "dependencies": {
     "argon2": "^0.44.0",
     "bcrypt": "^6.0.0",
+    "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -22,7 +23,17 @@
     "mongoos": "^0.0.1-security",
     "mongoose": "^9.7.4",
     "morgan": "^1.11.0",
+    "multer": "^2.2.0",
+    "multer-storage-cloudinary": "^4.0.0",
     "nodemon": "^3.1.14",
     "xss": "^1.0.15"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mustafa93rashid/paw-match.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mustafa93rashid/paw-match/issues"
+  },
+  "homepage": "https://github.com/mustafa93rashid/paw-match#readme"
 }
