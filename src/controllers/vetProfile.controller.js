@@ -1,18 +1,24 @@
 // controllers/vetProfile.controller.js
 
+const mongoose = require("mongoose");
 const VetProfile = require("../models/VetProfile");
 
 class VetProfileController {
   // Get current vet profile
   getMyProfile = async (req, res) => {
+    const currentUserId = req.user._id || req.user.id;
+
     const profile = await VetProfile.findOne({
-      userId: req.user.id,
+      userId: currentUserId,
     })
       .populate(
         "userId",
         "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
       )
-      .populate("shelterId", "name address city phone email");
+      .populate(
+        "shelterId",
+        "name email phone address city logo isActive",
+      );
 
     if (!profile) {
       return res.status(404).json({
@@ -30,13 +36,14 @@ class VetProfileController {
 
   // Update current vet profile
   updateMyProfile = async (req, res) => {
+    const currentUserId = req.user._id || req.user.id;
+
     const allowedFields = [
       "specialization",
       "bio",
       "experienceYears",
       "availableDays",
       "consultationTypes",
-      "shelterId",
     ];
 
     const updateData = {};
@@ -49,7 +56,7 @@ class VetProfileController {
 
     const profile = await VetProfile.findOneAndUpdate(
       {
-        userId: req.user.id,
+        userId: currentUserId,
       },
       updateData,
       {
@@ -61,7 +68,10 @@ class VetProfileController {
         "userId",
         "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
       )
-      .populate("shelterId", "name address city phone email");
+      .populate(
+        "shelterId",
+        "name email phone address city logo isActive",
+      );
 
     if (!profile) {
       return res.status(404).json({
@@ -77,16 +87,42 @@ class VetProfileController {
     });
   };
 
-  // Get all vets
+  // Get all active vets
   getAll = async (req, res) => {
-    const profiles = await VetProfile.find({
+    const { shelterId, specialization } = req.query;
+
+    const filter = {
       isActive: true,
-    })
+    };
+
+    if (shelterId) {
+      if (!mongoose.Types.ObjectId.isValid(shelterId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid shelter ID",
+        });
+      }
+
+      filter.shelterId = shelterId;
+    }
+
+    if (specialization) {
+      filter.specialization = {
+        $regex: specialization,
+        $options: "i",
+      };
+    }
+
+    const profiles = await VetProfile.find(filter)
       .populate(
         "userId",
         "firstName lastName email phone address profileImage role isActive",
       )
-      .populate("shelterId", "name address city");
+      .populate(
+        "shelterId",
+        "name email phone address city logo isActive",
+      )
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -96,14 +132,26 @@ class VetProfileController {
     });
   };
 
-  // Get one vet by profile ID
+  // Get vet by profile ID
   getOne = async (req, res) => {
-    const profile = await VetProfile.findById(req.params.id)
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid vet profile ID",
+      });
+    }
+
+    const profile = await VetProfile.findById(id)
       .populate(
         "userId",
         "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
       )
-      .populate("shelterId", "name address city phone email");
+      .populate(
+        "shelterId",
+        "name email phone address city logo isActive",
+      );
 
     if (!profile) {
       return res.status(404).json({

@@ -1,5 +1,7 @@
 const Shelter = require("../models/Shelter");
 const User = require("../models/User");
+const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
+const VetProfile = require("../models/VetProfile");
 class ShelterController {
   // Create shelter
   createShelter = async (req, res) => {
@@ -74,109 +76,105 @@ class ShelterController {
   };
 
   // Get approved and active shelters for public users
-getPublicShelters = async (req, res) => {
-  const { city, species, search } = req.query;
+  getPublicShelters = async (req, res) => {
+    const { city, species, search } = req.query;
 
-  const filter = {
-    isVerified: true,
-    verificationStatus: "approved",
-    isActive: true,
-  };
-
-  if (city) {
-    filter.city = {
-      $regex: city,
-      $options: "i",
+    const filter = {
+      isVerified: true,
+      verificationStatus: "approved",
+      isActive: true,
     };
-  }
 
-  if (species) {
-    filter.supportedSpecies = species;
-  }
+    if (city) {
+      filter.city = {
+        $regex: city,
+        $options: "i",
+      };
+    }
 
-  if (search) {
-    filter.$or = [
-      {
-        name: {
-          $regex: search,
-          $options: "i",
-        },
-      },
-      {
-        description: {
-          $regex: search,
-          $options: "i",
-        },
-      },
-      {
-        address: {
-          $regex: search,
-          $options: "i",
-        },
-      },
-      
-    ];
-  }
+    if (species) {
+      filter.supportedSpecies = species;
+    }
 
-  const shelters = await Shelter.find(filter)
-    .populate("createdBy", "firstName lastName email")
-    .sort({ createdAt: -1 })
+    if (search) {
+      filter.$or = [
+        {
+          name: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          description: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          address: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    const shelters = await Shelter.find(filter)
+      .populate("createdBy", "firstName lastName email")
+      .sort({ createdAt: -1 })
       .populate("verifiedBy", "firstName lastName");
 
-  return res.status(200).json({
-    success: true,
-    message: "Shelters retrieved successfully",
-    data: shelters,
-  });
-};
+    return res.status(200).json({
+      success: true,
+      message: "Shelters retrieved successfully",
+      data: shelters,
+    });
+  };
 
   // Get all shelters for superadmin
-getAllShelters = async (req, res) => {
-  const { verificationStatus, isActive, city } = req.query;
+  getAllShelters = async (req, res) => {
+    const { verificationStatus, isActive, city } = req.query;
 
-  const filter = {};
+    const filter = {};
 
-  if (verificationStatus) {
-    filter.verificationStatus = verificationStatus;
-  }
+    if (verificationStatus) {
+      filter.verificationStatus = verificationStatus;
+    }
 
-  if (isActive !== undefined) {
-    filter.isActive = isActive === "true";
-  }
+    if (isActive !== undefined) {
+      filter.isActive = isActive === "true";
+    }
 
-  if (city) {
-    filter.city = {
-      $regex: city,
-      $options: "i",
-    };
-  }
+    if (city) {
+      filter.city = {
+        $regex: city,
+        $options: "i",
+      };
+    }
 
-  const shelters = await Shelter.find(filter)
-    .populate("createdBy", "firstName lastName email role")
-    .populate("verifiedBy", "firstName lastName email")
-    .sort({ createdAt: -1 });
+    const shelters = await Shelter.find(filter)
+      .populate("createdBy", "firstName lastName email role")
+      .populate("verifiedBy", "firstName lastName email")
+      .sort({ createdAt: -1 });
 
-  return res.status(200).json({
-    success: true,
-    message: "Shelters retrieved successfully",
-    data: shelters,
-  });
-};
+    return res.status(200).json({
+      success: true,
+      message: "Shelters retrieved successfully",
+      data: shelters,
+    });
+  };
 
   // Get one shelter
   getShelterById = async (req, res) => {
     const shelter = await Shelter.findById(req.params.id)
-      .populate(
-        "createdBy",
-        "firstName lastName email phone role profileImage",
-      )
+      .populate("createdBy", "firstName lastName email phone role profileImage")
       .populate(
         "employees",
         "firstName lastName email phone role profileImage isActive",
       )
       .populate("animalIds")
       .populate("verifiedBy", "firstName lastName email")
-        .populate("verifiedBy", "firstName lastName");
+      .populate("verifiedBy", "firstName lastName");
 
     if (!shelter) {
       return res.status(404).json({
@@ -254,19 +252,13 @@ getAllShelters = async (req, res) => {
       }
     });
 
-    if (
-      req.body.longitude !== undefined &&
-      req.body.latitude !== undefined
-    ) {
+    if (req.body.longitude !== undefined && req.body.latitude !== undefined) {
       shelter.longitude = Number(req.body.longitude);
       shelter.latitude = Number(req.body.latitude);
 
       shelter.location = {
         type: "Point",
-        coordinates: [
-          Number(req.body.longitude),
-          Number(req.body.latitude),
-        ],
+        coordinates: [Number(req.body.longitude), Number(req.body.latitude)],
       };
     }
 
@@ -305,10 +297,7 @@ getAllShelters = async (req, res) => {
       });
     }
 
-    if (
-      shelter.verificationStatus === "approved" &&
-      shelter.isVerified
-    ) {
+    if (shelter.verificationStatus === "approved" && shelter.isVerified) {
       return res.status(400).json({
         success: false,
         message: "Shelter is already approved",
@@ -367,35 +356,35 @@ getAllShelters = async (req, res) => {
   };
 
   // Toggle shelter status - soft delete
-toggleShelterStatus = async (req, res) => {
-  const shelter = await Shelter.findById(req.params.id);
+  toggleShelterStatus = async (req, res) => {
+    const shelter = await Shelter.findById(req.params.id);
 
-  if (!shelter) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter not found",
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    if (!shelter.isActive && !shelter.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Shelter must be approved before activation",
+      });
+    }
+
+    shelter.isActive = !shelter.isActive;
+
+    await shelter.save();
+
+    return res.status(200).json({
+      success: true,
+      message: shelter.isActive
+        ? "Shelter activated successfully"
+        : "Shelter deactivated successfully",
+      data: shelter,
     });
-  }
-
-  if (!shelter.isActive && !shelter.isVerified) {
-    return res.status(400).json({
-      success: false,
-      message: "Shelter must be approved before activation",
-    });
-  }
-
-  shelter.isActive = !shelter.isActive;
-
-  await shelter.save();
-
-  return res.status(200).json({
-    success: true,
-    message: shelter.isActive
-      ? "Shelter activated successfully"
-      : "Shelter deactivated successfully",
-    data: shelter,
-  });
-};
+  };
 
   // Permanent delete - superadmin only
   permanentlyDeleteShelter = async (req, res) => {
@@ -415,8 +404,7 @@ toggleShelterStatus = async (req, res) => {
     if (shelter.isActive) {
       return res.status(400).json({
         success: false,
-        message:
-          "Deactivate the shelter before permanently deleting it",
+        message: "Deactivate the shelter before permanently deleting it",
       });
     }
 
@@ -428,135 +416,177 @@ toggleShelterStatus = async (req, res) => {
     });
   };
 
-// Add existing user as shelter employee
-addEmployee = async (req, res) => {
-  const { employeeId } = req.body;
+  // Add employee to shelter
+  addEmployee = async (req, res) => {
+    const { employeeId } = req.body;
 
-  const shelter = await Shelter.findById(req.params.id);
+    const shelter = await Shelter.findById(req.params.id);
 
-  if (!shelter) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter not found",
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const employee = await User.findById(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!["shelterEmployee", "vet"].includes(employee.role)) {
+      return res.status(400).json({
+        success: false,
+        message: "User role must be shelterEmployee or vet",
+      });
+    }
+
+    let employeeProfile;
+
+    if (employee.role === "shelterEmployee") {
+      employeeProfile = await ShelterEmployeeProfile.findOne({
+        userId: employee._id,
+        isActive: true,
+      });
+    }
+
+    if (employee.role === "vet") {
+      employeeProfile = await VetProfile.findOne({
+        userId: employee._id,
+        isActive: true,
+      });
+    }
+
+    if (!employeeProfile) {
+      return res.status(404).json({
+        success: false,
+        message:
+          employee.role === "vet"
+            ? "Vet profile not found"
+            : "Shelter employee profile not found",
+      });
+    }
+
+    if (
+      employeeProfile.shelterId &&
+      String(employeeProfile.shelterId) !== String(shelter._id)
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee already belongs to another shelter",
+      });
+    }
+
+    const employeeExists = shelter.employees.some(
+      (id) => String(id) === String(employeeId),
+    );
+
+    if (employeeExists) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee already belongs to this shelter",
+      });
+    }
+
+    shelter.employees.push(employee._id);
+    employeeProfile.shelterId = shelter._id;
+
+    await Promise.all([shelter.save(), employeeProfile.save()]);
+
+    const updatedShelter = await Shelter.findById(shelter._id).populate(
+      "employees",
+      "firstName lastName email phone role profileImage isActive",
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee added to shelter successfully",
+      data: updatedShelter,
     });
-  }
+  };
 
-  const employee = await User.findById(employeeId);
+  // Remove employee from shelter
+  removeEmployee = async (req, res) => {
+    const { employeeId } = req.params;
 
-  if (!employee) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const employee = await User.findById(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    let employeeProfile;
+
+    if (employee.role === "shelterEmployee") {
+      employeeProfile = await ShelterEmployeeProfile.findOne({
+        userId: employee._id,
+      });
+    }
+
+    if (employee.role === "vet") {
+      employeeProfile = await VetProfile.findOne({
+        userId: employee._id,
+      });
+    }
+
+    if (!employeeProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found",
+      });
+    }
+
+    const employeeExists = shelter.employees.some(
+      (id) => String(id) === String(employeeId),
+    );
+
+    if (!employeeExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found in this shelter",
+      });
+    }
+
+    shelter.employees = shelter.employees.filter(
+      (id) => String(id) !== String(employeeId),
+    );
+
+    if (
+      employeeProfile.shelterId &&
+      String(employeeProfile.shelterId) === String(shelter._id)
+    ) {
+      employeeProfile.shelterId = null;
+    }
+
+    await Promise.all([shelter.save(), employeeProfile.save()]);
+
+    const updatedShelter = await Shelter.findById(shelter._id).populate(
+      "employees",
+      "firstName lastName email phone role profileImage isActive",
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee removed from shelter successfully",
+      data: updatedShelter,
     });
-  }
-
-  if (employee.role !== "shelterEmployee") {
-    return res.status(400).json({
-      success: false,
-      message: "User role must be shelterEmployee",
-    });
-  }
-
-  if (
-    employee.shelterId &&
-    String(employee.shelterId) !== String(shelter._id)
-  ) {
-    return res.status(409).json({
-      success: false,
-      message: "Employee already belongs to another shelter",
-    });
-  }
-
-  const employeeExists = shelter.employees.some(
-    (id) => String(id) === String(employeeId),
-  );
-
-  if (employeeExists) {
-    return res.status(409).json({
-      success: false,
-      message: "Employee already belongs to this shelter",
-    });
-  }
-
-  shelter.employees.push(employee._id);
-  employee.shelterId = shelter._id;
-
-  await Promise.all([
-    shelter.save(),
-    employee.save(),
-  ]);
-
-  const updatedShelter = await Shelter.findById(shelter._id).populate(
-    "employees",
-    "firstName lastName email phone role shelterId",
-  );
-
-  return res.status(200).json({
-    success: true,
-    message: "Employee added to shelter successfully",
-    data: updatedShelter,
-  });
-};
-// Remove employee from shelter
-removeEmployee = async (req, res) => {
-  const { employeeId } = req.params;
-
-  const shelter = await Shelter.findById(req.params.id);
-
-  if (!shelter) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter not found",
-    });
-  }
-
-  const employee = await User.findById(employeeId);
-
-  if (!employee) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
-    });
-  }
-
-  const employeeExists = shelter.employees.some(
-    (id) => String(id) === String(employeeId),
-  );
-
-  if (!employeeExists) {
-    return res.status(404).json({
-      success: false,
-      message: "Employee not found in this shelter",
-    });
-  }
-
-  shelter.employees = shelter.employees.filter(
-    (id) => String(id) !== String(employeeId),
-  );
-
-  if (
-    employee.shelterId &&
-    String(employee.shelterId) === String(shelter._id)
-  ) {
-    employee.shelterId = null;
-  }
-
-  await Promise.all([
-    shelter.save(),
-    employee.save(),
-  ]);
-
-  const updatedShelter = await Shelter.findById(shelter._id).populate(
-    "employees",
-    "firstName lastName email phone role shelterId",
-  );
-
-  return res.status(200).json({
-    success: true,
-    message: "Employee removed from shelter successfully",
-    data: updatedShelter,
-  });
-};
+  };
 }
 
 module.exports = new ShelterController();

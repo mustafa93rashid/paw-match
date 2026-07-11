@@ -1,5 +1,3 @@
-// models/AdopterProfile.js
-
 const mongoose = require("mongoose");
 
 const adopterProfileSchema = new mongoose.Schema(

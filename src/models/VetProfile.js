@@ -11,6 +11,13 @@ const vetProfileSchema = new mongoose.Schema(
       unique: true,
     },
 
+    shelterId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shelter",
+      default: null,
+      index: true,
+    },
+
     specialization: {
       type: String,
       trim: true,
@@ -20,6 +27,7 @@ const vetProfileSchema = new mongoose.Schema(
     bio: {
       type: String,
       trim: true,
+      maxlength: 1000,
       default: null,
     },
 
@@ -31,6 +39,15 @@ const vetProfileSchema = new mongoose.Schema(
 
     availableDays: {
       type: [String],
+      enum: [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ],
       default: [],
     },
 
@@ -40,17 +57,10 @@ const vetProfileSchema = new mongoose.Schema(
       default: [],
     },
 
-    // shelterId: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "Shelter",
-    //   default: null,
-    // },
-
     isActive: {
-  type: Boolean,
-  default: true,
-}
-
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
