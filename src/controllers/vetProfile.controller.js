@@ -6,7 +6,7 @@ const VetProfile = require("../models/VetProfile");
 class VetProfileController {
   // Get current vet profile
   getMyProfile = async (req, res) => {
-    const currentUserId = req.user._id || req.user.id;
+    const currentUserId = req.user._id 
 
     const profile = await VetProfile.findOne({
       userId: currentUserId,

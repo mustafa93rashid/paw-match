@@ -41,9 +41,15 @@ class AuthController {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
+      if (!user.isActive) {
+    return res.status(403).json({
+      success: false,
+      message: "Account is inactive",
+    });
+  }
+
     const payload = {
       id: user._id,
-      email: user.email,
       role: user.role,
     };
 
@@ -57,10 +63,11 @@ class AuthController {
     cookiesService.setAccessToken(res, token);
     cookiesService.setRefreshToken(res, refreshToken);
 
-    res.status(200).json({
-      message: "User signed in successfully",
-      user,
-    });
+  return res.status(200).json({
+    success: true,
+    message: "User signed in successfully",
+    data: user,
+  });
   };
 
   logout = async (req, res) => {
@@ -248,7 +255,6 @@ class AuthController {
 
     const payload = {
       id: user._id,
-      email: user.email,
       role: user.role,
     };
 
