@@ -8,7 +8,7 @@ class ShelterEmployeeProfileController {
   // Get the current shelter employee profile
   getMyProfile = async (req, res) => {
     const profile = await ShelterEmployeeProfile.findOne({
-      userId: req.user.id,
+      userId: req.user._id,
     })
       .populate(
         "userId",
@@ -49,7 +49,7 @@ class ShelterEmployeeProfileController {
 
     const profile = await ShelterEmployeeProfile.findOneAndUpdate(
       {
-        userId: req.user.id,
+        userId: req.user._id,
       },
       updateData,
       {
@@ -99,7 +99,7 @@ class ShelterEmployeeProfileController {
   // Get one shelter employee profile by profile ID
   getOne = async (req, res) => {
     const profile = await ShelterEmployeeProfile.findById(
-      req.params.id,
+      req.params._id,
     )
       .populate(
         "userId",

@@ -42,6 +42,15 @@
 * Remove vets.
 * View shelter animals.
 
+## Adoption Request
+
+* Submit adoption requests.
+* Review adoption requests.
+* Update request status.
+* Track adoption progress.
+* Approve or reject requests.
+* View adoption history.
+
 ## Search by Location
 
 * Search nearby shelters.
@@ -58,16 +67,6 @@
 * Complete consultations.
 * Add consultation notes.
 * View appointment history.
-
-
-## Adoption Request
-
-* Submit adoption requests.
-* Review adoption requests.
-* Update request status.
-* Track adoption progress.
-* Approve or reject requests.
-* View adoption history.
 
 ## Reviews (Bonus Feature)
 

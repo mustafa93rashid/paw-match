@@ -24,8 +24,7 @@ class AnimalsController {
       return false;
     }
 
-    const currentUserId = user._id || user.id;
-
+    const currentUserId = user._id;
     const employeeProfile = await this.getEmployeeProfile(currentUserId);
 
     if (!employeeProfile || !employeeProfile.shelterId) {
@@ -37,8 +36,7 @@ class AnimalsController {
 
   // Create a new animal
   createAnimal = async (req, res) => {
-    const currentUserId = req.user._id || req.user.id;
-
+    const currentUserId = req.user._id;
     let shelterId;
 
     if (req.user.role === "shelterEmployee") {

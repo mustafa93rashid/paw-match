@@ -44,9 +44,7 @@ class ShelterController {
       capacity,
       operatingHours,
       socialLinks,
-
-      createdBy: req.user._id || req.user.id,
-
+      createdBy: req.user._id,
       verificationStatus: "pending",
       isVerified: false,
       isActive: true,
@@ -220,7 +218,7 @@ class ShelterController {
       });
     }
 
-    const currentUserId = String(req.user._id || req.user.id);
+const currentUserId = String(req.user._id);
     const isOwner = String(shelter.createdBy) === currentUserId;
     const isSuperAdmin = req.user.role === "superadmin";
 
@@ -308,7 +306,7 @@ class ShelterController {
     shelter.isVerified = true;
     shelter.isActive = true;
     shelter.rejectionReason = null;
-    shelter.verifiedBy = req.user._id || req.user.id;
+shelter.verifiedBy = req.user._id;
     shelter.verifiedAt = new Date();
 
     await shelter.save();
@@ -343,7 +341,7 @@ class ShelterController {
     shelter.verificationStatus = "rejected";
     shelter.isVerified = false;
     shelter.rejectionReason = reason.trim();
-    shelter.verifiedBy = req.user._id || req.user.id;
+shelter.verifiedBy = req.user._id;
     shelter.verifiedAt = new Date();
 
     await shelter.save();
@@ -417,97 +415,144 @@ class ShelterController {
   };
 
   // Add employee to shelter
-  addEmployee = async (req, res) => {
-    const { employeeId } = req.body;
+// Add employee to shelter
+addEmployee = async (req, res) => {
+  const { employeeId } = req.body;
 
-    const shelter = await Shelter.findById(req.params.id);
-
-    if (!shelter) {
-      return res.status(404).json({
-        success: false,
-        message: "Shelter not found",
-      });
-    }
-
-    const employee = await User.findById(employeeId);
-
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    if (!["shelterEmployee", "vet"].includes(employee.role)) {
-      return res.status(400).json({
-        success: false,
-        message: "User role must be shelterEmployee or vet",
-      });
-    }
-
-    let employeeProfile;
-
-    if (employee.role === "shelterEmployee") {
-      employeeProfile = await ShelterEmployeeProfile.findOne({
-        userId: employee._id,
-        isActive: true,
-      });
-    }
-
-    if (employee.role === "vet") {
-      employeeProfile = await VetProfile.findOne({
-        userId: employee._id,
-        isActive: true,
-      });
-    }
-
-    if (!employeeProfile) {
-      return res.status(404).json({
-        success: false,
-        message:
-          employee.role === "vet"
-            ? "Vet profile not found"
-            : "Shelter employee profile not found",
-      });
-    }
-
-    if (
-      employeeProfile.shelterId &&
-      String(employeeProfile.shelterId) !== String(shelter._id)
-    ) {
-      return res.status(409).json({
-        success: false,
-        message: "Employee already belongs to another shelter",
-      });
-    }
-
-    const employeeExists = shelter.employees.some(
-      (id) => String(id) === String(employeeId),
-    );
-
-    if (employeeExists) {
-      return res.status(409).json({
-        success: false,
-        message: "Employee already belongs to this shelter",
-      });
-    }
-
-    shelter.employees.push(employee._id);
-    employeeProfile.shelterId = shelter._id;
-
-    await Promise.all([shelter.save(), employeeProfile.save()]);
-
-    const updatedShelter = await Shelter.findById(shelter._id).populate(
-      "employees",
-      "firstName lastName email phone role profileImage isActive",
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Employee added to shelter successfully",
-      data: updatedShelter,
+  // التحقق من إرسال employeeId
+  if (!employeeId) {
+    return res.status(400).json({
+      success: false,
+      message: "Employee ID is required",
     });
-  };
+  }
+
+  // جلب الملجأ من ID الموجود في الرابط
+  const shelter = await Shelter.findById(req.params.id);
+
+  if (!shelter) {
+    return res.status(404).json({
+      success: false,
+      message: "Shelter not found",
+    });
+  }
+
+  // منع إضافة موظفين إلى ملجأ غير موافق عليه أو غير فعال
+  if (
+    !shelter.isVerified ||
+    shelter.verificationStatus !== "approved" ||
+    !shelter.isActive
+  ) {
+    return res.status(403).json({
+      success: false,
+      message:
+        "Employees can only be added to an approved and active shelter",
+    });
+  }
+
+  // جلب المستخدم المراد إضافته
+  const employee = await User.findById(employeeId);
+
+  if (!employee) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  // منع إضافة حساب غير فعال
+  if (!employee.isActive) {
+    return res.status(403).json({
+      success: false,
+      message: "Inactive user cannot be added to a shelter",
+    });
+  }
+
+  // السماح فقط لموظف ملجأ أو طبيب
+  if (!["shelterEmployee", "vet"].includes(employee.role)) {
+    return res.status(400).json({
+      success: false,
+      message: "User role must be shelterEmployee or vet",
+    });
+  }
+
+  let employeeProfile;
+
+  // جلب بروفايل موظف الملجأ
+  if (employee.role === "shelterEmployee") {
+    employeeProfile = await ShelterEmployeeProfile.findOne({
+      userId: employee._id,
+      isActive: true,
+    });
+  }
+
+  // جلب بروفايل الطبيب
+  if (employee.role === "vet") {
+    employeeProfile = await VetProfile.findOne({
+      userId: employee._id,
+      isActive: true,
+    });
+  }
+
+  if (!employeeProfile) {
+    return res.status(404).json({
+      success: false,
+      message:
+        employee.role === "vet"
+          ? "Active vet profile not found"
+          : "Active shelter employee profile not found",
+    });
+  }
+
+  // منع إضافة الموظف إذا كان تابعًا إلى ملجأ آخر
+  if (
+    employeeProfile.shelterId &&
+    String(employeeProfile.shelterId) !== String(shelter._id)
+  ) {
+    return res.status(409).json({
+      success: false,
+      message: "Employee already belongs to another shelter",
+    });
+  }
+
+  // التحقق هل الموظف موجود أصلًا داخل الملجأ
+  const employeeExists = shelter.employees.some(
+    (id) => String(id) === String(employee._id),
+  );
+
+  if (employeeExists) {
+    return res.status(409).json({
+      success: false,
+      message: "Employee already belongs to this shelter",
+    });
+  }
+
+  // إضافة المستخدم إلى قائمة موظفي الملجأ
+  shelter.employees.push(employee._id);
+
+  // ربط بروفايل الموظف بالملجأ
+  employeeProfile.shelterId = shelter._id;
+
+  // حفظ التعديلين معًا
+  await Promise.all([
+    shelter.save(),
+    employeeProfile.save(),
+  ]);
+
+  // إرجاع الملجأ بعد تعبئة بيانات الموظفين
+  const updatedShelter = await Shelter.findById(
+    shelter._id,
+  ).populate(
+    "employees",
+    "firstName lastName email phone role profileImage isActive",
+  );
+
+  return res.status(200).json({
+    success: true,
+    message: "Employee added to shelter successfully",
+    data: updatedShelter,
+  });
+};
 
   // Remove employee from shelter
   removeEmployee = async (req, res) => {
