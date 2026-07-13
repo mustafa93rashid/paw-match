@@ -3,6 +3,8 @@ const User = require("../models/User");
 const AdopterProfile = require("../models/AdopterProfile");
 const VetProfile = require("../models/VetProfile");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
+//zain
+const passwordService = require("../utils/passwordService");
 class UsersController {
   getAll = async (req, res) => {
     const users = await User.find({}).select("-password");
@@ -239,6 +241,51 @@ const user = await User.findById(req.user._id).select("-password");
       success: true,
       message: "Profile updated successfully",
       data: userData,
+    });
+  };
+  // zain hussein - دالة إنشاء مستخدم وبروفايل بواسطة السوبر أدمن
+  adminCreateUser = async (req, res) => {
+    const { firstName, lastName, email, password, role } = req.body;
+
+    // التحقق من صحة الدور المدخل
+    const allowedRoles = ["shelterEmployee", "vet", "adopter"];
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role specified. Allowed roles are: shelterEmployee, vet, adopter",
+      });
+    }
+
+    // تشفير كلمة المرور
+    const hashedPassword = await passwordService.hash(password);
+
+    // إنشاء المستخدم في قاعدة البيانات
+    let newUser = await User.create({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+      role,
+    });
+
+    // إنشاء بروفايل فارغ تلقائياً حسب الدور المختار
+    const profileData = { userId: newUser._id, isActive: true };
+    if (role === "adopter") {
+      await AdopterProfile.create(profileData);
+    } else if (role === "shelterEmployee") {
+      await ShelterEmployeeProfile.create(profileData);
+    } else if (role === "vet") {
+      await VetProfile.create(profileData);
+    }
+
+    // إخفاء الباسورد من الاستجابة لحماية البيانات
+    newUser = newUser.toObject();
+    delete newUser.password;
+
+    return res.status(201).json({
+      success: true,
+      message: "User and role profile created successfully by admin",
+      data: newUser,
     });
   };
 }
