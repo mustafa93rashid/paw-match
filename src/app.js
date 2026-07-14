@@ -36,8 +36,6 @@ app.use("/api/v1/shelters", require("./routes/shelter.route"));
 // Animal routes
 app.use("/api/v1/animals", require("./routes/animal.route"));
 
-app.use("/api/v1/animals", require("./routes/animal.route"));
-
 // Image upload test routes
 app.use("/api/v1/adoptions", require("./routes/adoptionRequest.route"));
 
