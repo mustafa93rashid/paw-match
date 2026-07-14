@@ -24,4 +24,7 @@ router.put("/:id/role", [auth, role(["superadmin"])], asyncHandler(userControlle
 // Activate / Deactivate user (Super Admin)
 router.put("/:id/status", [auth, role(["superadmin"])], asyncHandler(userController.updateStatus));
 
+//zain إنشاء مستخدم جديد وبروفايله الخاص بواسطة السوبر أدمن فقط
+router.post("/admin/create-user", [auth, role(["superadmin"])],asyncHandler(userController.adminCreateUser));
+
 module.exports = router;
