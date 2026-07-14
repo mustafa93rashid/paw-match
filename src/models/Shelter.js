@@ -193,11 +193,25 @@ const shelterSchema = new mongoose.Schema(
   },
 );
 
-// البحث الجغرافي عن أقرب الملاجئ
+
 shelterSchema.index({ location: "2dsphere" });
 
-// تحسين البحث
 shelterSchema.index({ city: 1 });
 shelterSchema.index({ verificationStatus: 1, isActive: 1 });
 
 module.exports = mongoose.model("Shelter", shelterSchema);
+
+// Modified by Batoul - Reason: Task 5 (Nearest Shelter API) - Added GeoJSON structure and 2dsphere index
+location: {
+  type: {
+    type: String,
+    enum: ['Point'], 
+    default: 'Point'
+  },
+  coordinates: {
+    type: [Number], // [longitude, latitude]
+    required: true
+  }
+}
+
+shelterSchema.index({ location: '2dsphere' });

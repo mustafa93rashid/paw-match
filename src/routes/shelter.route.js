@@ -39,3 +39,9 @@ router.patch("/:id/employees", [auth, role(["superadmin", "shelterEmployee"])], 
 router.delete("/:id/employees/:employeeId", [auth, role(["superadmin", "shelterEmployee"])], asyncHandler(shelterController.removeEmployee));
 
 module.exports = router;
+
+// Modified by Batoul - Reason: Task 5 - Added route for nearest shelters
+import { getNearestShelters } from '../controllers/shelter.controller.js';
+
+router.get('/nearest', getNearestShelters);
+router.get('/:id', getShelterById);

@@ -635,3 +635,64 @@ addEmployee = async (req, res) => {
 }
 
 module.exports = new ShelterController();
+
+
+
+
+// Modified by Batoul - Reason: Task 5 - Create Nearest Shelter Search API
+export const getNearestShelters = async (req, res) => {
+  try {
+      // نستقبل خط الطول، خط العرض، والمسافة من الـ Query
+      const { lng, lat, distance } = req.query;
+
+      if (!lng || !lat || !distance) {
+          return res.status(400).json({ 
+              success: false, 
+              message: "يرجى توفير خط الطول (lng)، خط العرض (lat)، والمسافة (distance)" 
+          });
+      }
+
+      // الشرط: يعمل البحث ضمن نصف المسافة المحددة (بالمتر)
+      const searchDistance = parseFloat(distance) / 2;
+
+      const shelters = await Shelter.find({
+          // الشرط: لا تظهر الملاجئ غير الفعالة أو غير المقبولة
+        
+          status: 'accepted',
+          isActive: true, 
+          
+          // استخدام GeoJSON للبحث والترتيب التلقائي حسب الأقرب
+          location: {
+              $near: {
+                  $geometry: {
+                      type: "Point",
+                      coordinates: [parseFloat(lng), parseFloat(lat)]
+                  },
+                  $maxDistance: searchDistance // المسافة بالمتر
+              }
+          }
+      });
+
+      // الشرط: في حال لم يوجد أي ملجأ لا نرجع خطأ، بل رسالة توضيحية
+      if (shelters.length === 0) {
+          return res.status(200).json({ 
+              success: true, 
+              message: "لا توجد ملاجئ قريبة ضمن هذه المسافة",
+              data: []
+          });
+      }
+
+      return res.status(200).json({ 
+          success: true, 
+          message: "تم العثور على الملاجئ القريبة بنجاح",
+          data: shelters
+      });
+
+  } catch (error) {
+      return res.status(500).json({ 
+          success: false, 
+          message: "حدث خطأ أثناء البحث عن الملاجئ", 
+          error: error.message 
+      });
+  }
+};
