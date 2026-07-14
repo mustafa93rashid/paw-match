@@ -70,7 +70,6 @@ const shelterSchema = new mongoose.Schema(
         enum: ["Point"],
         default: "Point",
       },
-
       coordinates: {
         type: [Number],
         default: undefined,
@@ -141,15 +140,17 @@ const shelterSchema = new mongoose.Schema(
     },
 
     operatingHours: {
-      open: {
-        type: String,
-        default: null,
+      type: {
+        open: {
+          type: String,
+          default: null,
+        },
+        close: {
+          type: String,
+          default: null,
+        },
       },
-
-      close: {
-        type: String,
-        default: null,
-      },
+      default: {},
     },
 
     socialLinks: {
@@ -157,12 +158,10 @@ const shelterSchema = new mongoose.Schema(
         type: String,
         default: null,
       },
-
       instagram: {
         type: String,
         default: null,
       },
-
       website: {
         type: String,
         default: null,
@@ -181,8 +180,6 @@ const shelterSchema = new mongoose.Schema(
       default: null,
     },
 
-    
-
     verifiedAt: {
       type: Date,
       default: null,
@@ -190,28 +187,11 @@ const shelterSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
-
 shelterSchema.index({ location: "2dsphere" });
-
 shelterSchema.index({ city: 1 });
 shelterSchema.index({ verificationStatus: 1, isActive: 1 });
 
 module.exports = mongoose.model("Shelter", shelterSchema);
-
-// Modified by Batoul - Reason: Task 5 (Nearest Shelter API) - Added GeoJSON structure and 2dsphere index
-location: {
-  type: {
-    type: String,
-    enum: ['Point'], 
-    default: 'Point'
-  },
-  coordinates: {
-    type: [Number], // [longitude, latitude]
-    required: true
-  }
-}
-
-shelterSchema.index({ location: '2dsphere' });

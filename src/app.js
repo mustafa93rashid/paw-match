@@ -17,6 +17,22 @@ app.use("/api/v1/auth", require("./routes/auth.route"));
 app.use("/api/v1/user", require("./routes/user.route"));
 // Modified by Batoul - Reason: Task 5 - Register shelter routes
 app.use("/api/v1/shelter", require("./routes/shelter.route"));
+
+// Profile routes
+app.use("/api/v1/shelter-employee-profile", require("./routes/profiles/shelterEmployeeProfile.routes"));
+app.use("/api/v1/adopter-profile", require("./routes/profiles/adopterProfile.route"));
+app.use("/api/v1/vet-profile", require("./routes/profiles/vetProfile.routes"));
+
+// Shelter routes
+app.use("/api/v1/shelters", require("./routes/shelter.route"));
+
+// Animal routes
+app.use("/api/v1/animals", require("./routes/animal.route"));
+
+// Image upload test routes
+app.use("/api/v1/adoptions", require("./routes/adoptionRequest.route"));
+
+// Error handling
 app.use(errorHandler);
 app.use(notFound);
 

@@ -636,13 +636,9 @@ addEmployee = async (req, res) => {
 
 module.exports = new ShelterController();
 
-
-
-
 // Modified by Batoul - Reason: Task 5 - Create Nearest Shelter Search API
-export const getNearestShelters = async (req, res) => {
+const getNearestShelters = async (req, res) => {
   try {
-      // نستقبل خط الطول، خط العرض، والمسافة من الـ Query
       const { lng, lat, distance } = req.query;
 
       if (!lng || !lat || !distance) {
@@ -652,28 +648,22 @@ export const getNearestShelters = async (req, res) => {
           });
       }
 
-      // الشرط: يعمل البحث ضمن نصف المسافة المحددة (بالمتر)
       const searchDistance = parseFloat(distance) / 2;
 
       const shelters = await Shelter.find({
-          // الشرط: لا تظهر الملاجئ غير الفعالة أو غير المقبولة
-        
           status: 'accepted',
           isActive: true, 
-          
-          // استخدام GeoJSON للبحث والترتيب التلقائي حسب الأقرب
           location: {
               $near: {
                   $geometry: {
                       type: "Point",
                       coordinates: [parseFloat(lng), parseFloat(lat)]
                   },
-                  $maxDistance: searchDistance // المسافة بالمتر
+                  $maxDistance: searchDistance
               }
           }
       });
 
-      // الشرط: في حال لم يوجد أي ملجأ لا نرجع خطأ، بل رسالة توضيحية
       if (shelters.length === 0) {
           return res.status(200).json({ 
               success: true, 
@@ -696,3 +686,6 @@ export const getNearestShelters = async (req, res) => {
       });
   }
 };
+
+
+module.exports.getNearestShelters = getNearestShelters;
