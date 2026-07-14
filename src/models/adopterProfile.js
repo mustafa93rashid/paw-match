@@ -58,4 +58,4 @@ const adopterProfileSchema = new mongoose.Schema(
   },
 );
 
-module.exports = mongoose.model("AdopterProfile", adopterProfileSchema);
+module.exports = mongoose.models.AdopterProfile|| mongoose.model("AdopterProfile", adopterProfileSchema);

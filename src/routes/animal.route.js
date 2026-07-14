@@ -8,6 +8,10 @@ const role = require("../middlewares/role");
 // Create animal
 router.post("/", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.createAnimal));
 
+//matching system
+router.get("/match", [auth], asyncHandler(animalController.getMatchedAnimals));
+
+
 // Get all animals
 router.get("/", [auth], asyncHandler(animalController.getAll));
 
