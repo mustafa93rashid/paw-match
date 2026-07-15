@@ -111,6 +111,7 @@ class AnimalsController {
 
   // Get all animals
   getAll = async (req, res) => {
+    const { page, limit, skip } = req.pagination;
     const {
       species,
       breed,
@@ -201,7 +202,8 @@ class AnimalsController {
     const animals = await Animal.find(filter)
       .populate("shelterId", "name city address")
       .populate("addedBy", "firstName lastName email role")
-      .sort(sort);
+      .sort(sort).skip(skip)
+    .limit(limit);;
 
     return res.status(200).json({
       success: true,
