@@ -4,8 +4,7 @@ const Shelter = require("../models/Shelter");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 const  {calculateMatchScore} = require("../services/matching.service");
 const AdopterProfile = require("../models/adopterProfile");
-
-
+const getPaginatedAnimals = require("../utils/pagination"); 
 class AnimalsController {
 
   // Get current shelter employee profile
@@ -74,6 +73,7 @@ class AnimalsController {
       }
     }
 
+    
     const animal = await Animal.create({
       ...req.body,
       shelterId,
@@ -104,6 +104,8 @@ class AnimalsController {
       vaccinated,
       isActive,
       search,
+      page = 1,
+      limit = 10,
       sort = "-createdAt",
     } = req.query;
 
@@ -180,16 +182,27 @@ class AnimalsController {
       ];
     }
 
-    const animals = await Animal.find(filter)
-      .populate("shelterId", "name city address")
-      .populate("addedBy", "firstName lastName email role")
+  const query = Animal.find(filter)
+      .populate("shelterId", "name city address isActive")
+      .select("name species  age ageUnit gender  color  adoptionStatus  shelterId ")
+      // .populate("addedBy", "firstName lastName email role")
       .sort(sort);
+
+    const result = await getPaginatedAnimals(
+      query,
+      Number(page),
+      Number(limit),
+      filter
+    );
 
     return res.status(200).json({
       success: true,
       message: "Animals retrieved successfully",
-      data: animals,
-    });
+ 
+    animals:result.data,          
+    pagination:result.pagination
+});
+  
   };
 
   // Get animal by ID
