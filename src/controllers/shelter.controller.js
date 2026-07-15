@@ -45,9 +45,6 @@ class ShelterController {
       operatingHours,
       socialLinks,
       createdBy: req.user._id,
-      verificationStatus: "pending",
-      isVerified: false,
-      isActive: true,
     };
 
     /*
@@ -64,7 +61,20 @@ class ShelterController {
       };
     }
 
+    if (req.user.role !== "superadmin") {
+      shelterData.employees = [req.user._id];
+    }
+
     const shelter = await Shelter.create(shelterData);
+
+    if (req.user.role === "shelterEmployee") {
+      await ShelterEmployeeProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        {
+          shelterId: shelter._id,
+        },
+      );
+    }
 
     return res.status(201).json({
       success: true,
@@ -218,7 +228,7 @@ class ShelterController {
       });
     }
 
-const currentUserId = String(req.user._id);
+    const currentUserId = String(req.user._id);
     const isOwner = String(shelter.createdBy) === currentUserId;
     const isSuperAdmin = req.user.role === "superadmin";
 
@@ -306,7 +316,7 @@ const currentUserId = String(req.user._id);
     shelter.isVerified = true;
     shelter.isActive = true;
     shelter.rejectionReason = null;
-shelter.verifiedBy = req.user._id;
+    shelter.verifiedBy = req.user._id;
     shelter.verifiedAt = new Date();
 
     await shelter.save();
@@ -341,7 +351,7 @@ shelter.verifiedBy = req.user._id;
     shelter.verificationStatus = "rejected";
     shelter.isVerified = false;
     shelter.rejectionReason = reason.trim();
-shelter.verifiedBy = req.user._id;
+    shelter.verifiedBy = req.user._id;
     shelter.verifiedAt = new Date();
 
     await shelter.save();
@@ -415,144 +425,138 @@ shelter.verifiedBy = req.user._id;
   };
 
   // Add employee to shelter
-// Add employee to shelter
-addEmployee = async (req, res) => {
-  const { employeeId } = req.body;
+  addEmployee = async (req, res) => {
+    const { employeeId } = req.body;
 
-  // التحقق من إرسال employeeId
-  if (!employeeId) {
-    return res.status(400).json({
-      success: false,
-      message: "Employee ID is required",
+    // التحقق من إرسال employeeId
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required",
+      });
+    }
+
+    // جلب الملجأ من ID الموجود في الرابط
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    // منع إضافة موظفين إلى ملجأ غير موافق عليه أو غير فعال
+    if (
+      !shelter.isVerified ||
+      shelter.verificationStatus !== "approved" ||
+      !shelter.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Employees can only be added to an approved and active shelter",
+      });
+    }
+
+    // جلب المستخدم المراد إضافته
+    const employee = await User.findById(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // منع إضافة حساب غير فعال
+    if (!employee.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Inactive user cannot be added to a shelter",
+      });
+    }
+
+    // السماح فقط لموظف ملجأ أو طبيب
+    if (!["shelterEmployee", "vet"].includes(employee.role)) {
+      return res.status(400).json({
+        success: false,
+        message: "User role must be shelterEmployee or vet",
+      });
+    }
+
+    let employeeProfile;
+
+    // جلب بروفايل موظف الملجأ
+    if (employee.role === "shelterEmployee") {
+      employeeProfile = await ShelterEmployeeProfile.findOne({
+        userId: employee._id,
+        isActive: true,
+      });
+    }
+
+    // جلب بروفايل الطبيب
+    if (employee.role === "vet") {
+      employeeProfile = await VetProfile.findOne({
+        userId: employee._id,
+        isActive: true,
+      });
+    }
+
+    if (!employeeProfile) {
+      return res.status(404).json({
+        success: false,
+        message:
+          employee.role === "vet"
+            ? "Active vet profile not found"
+            : "Active shelter employee profile not found",
+      });
+    }
+
+    // منع إضافة الموظف إذا كان تابعًا إلى ملجأ آخر
+    if (
+      employeeProfile.shelterId &&
+      String(employeeProfile.shelterId) !== String(shelter._id)
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee already belongs to another shelter",
+      });
+    }
+
+    // التحقق هل الموظف موجود أصلًا داخل الملجأ
+    const employeeExists = shelter.employees.some(
+      (id) => String(id) === String(employee._id),
+    );
+
+    if (employeeExists) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee already belongs to this shelter",
+      });
+    }
+
+    // إضافة المستخدم إلى قائمة موظفي الملجأ
+    shelter.employees.push(employee._id);
+
+    // ربط بروفايل الموظف بالملجأ
+    employeeProfile.shelterId = shelter._id;
+
+    // حفظ التعديلين معًا
+    await Promise.all([shelter.save(), employeeProfile.save()]);
+
+    // إرجاع الملجأ بعد تعبئة بيانات الموظفين
+    const updatedShelter = await Shelter.findById(shelter._id).populate(
+      "employees",
+      "firstName lastName email phone role profileImage isActive",
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee added to shelter successfully",
+      data: updatedShelter,
     });
-  }
-
-  // جلب الملجأ من ID الموجود في الرابط
-  const shelter = await Shelter.findById(req.params.id);
-
-  if (!shelter) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter not found",
-    });
-  }
-
-  // منع إضافة موظفين إلى ملجأ غير موافق عليه أو غير فعال
-  if (
-    !shelter.isVerified ||
-    shelter.verificationStatus !== "approved" ||
-    !shelter.isActive
-  ) {
-    return res.status(403).json({
-      success: false,
-      message:
-        "Employees can only be added to an approved and active shelter",
-    });
-  }
-
-  // جلب المستخدم المراد إضافته
-  const employee = await User.findById(employeeId);
-
-  if (!employee) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
-    });
-  }
-
-  // منع إضافة حساب غير فعال
-  if (!employee.isActive) {
-    return res.status(403).json({
-      success: false,
-      message: "Inactive user cannot be added to a shelter",
-    });
-  }
-
-  // السماح فقط لموظف ملجأ أو طبيب
-  if (!["shelterEmployee", "vet"].includes(employee.role)) {
-    return res.status(400).json({
-      success: false,
-      message: "User role must be shelterEmployee or vet",
-    });
-  }
-
-  let employeeProfile;
-
-  // جلب بروفايل موظف الملجأ
-  if (employee.role === "shelterEmployee") {
-    employeeProfile = await ShelterEmployeeProfile.findOne({
-      userId: employee._id,
-      isActive: true,
-    });
-  }
-
-  // جلب بروفايل الطبيب
-  if (employee.role === "vet") {
-    employeeProfile = await VetProfile.findOne({
-      userId: employee._id,
-      isActive: true,
-    });
-  }
-
-  if (!employeeProfile) {
-    return res.status(404).json({
-      success: false,
-      message:
-        employee.role === "vet"
-          ? "Active vet profile not found"
-          : "Active shelter employee profile not found",
-    });
-  }
-
-  // منع إضافة الموظف إذا كان تابعًا إلى ملجأ آخر
-  if (
-    employeeProfile.shelterId &&
-    String(employeeProfile.shelterId) !== String(shelter._id)
-  ) {
-    return res.status(409).json({
-      success: false,
-      message: "Employee already belongs to another shelter",
-    });
-  }
-
-  // التحقق هل الموظف موجود أصلًا داخل الملجأ
-  const employeeExists = shelter.employees.some(
-    (id) => String(id) === String(employee._id),
-  );
-
-  if (employeeExists) {
-    return res.status(409).json({
-      success: false,
-      message: "Employee already belongs to this shelter",
-    });
-  }
-
-  // إضافة المستخدم إلى قائمة موظفي الملجأ
-  shelter.employees.push(employee._id);
-
-  // ربط بروفايل الموظف بالملجأ
-  employeeProfile.shelterId = shelter._id;
-
-  // حفظ التعديلين معًا
-  await Promise.all([
-    shelter.save(),
-    employeeProfile.save(),
-  ]);
-
-  // إرجاع الملجأ بعد تعبئة بيانات الموظفين
-  const updatedShelter = await Shelter.findById(
-    shelter._id,
-  ).populate(
-    "employees",
-    "firstName lastName email phone role profileImage isActive",
-  );
-
-  return res.status(200).json({
-    success: true,
-    message: "Employee added to shelter successfully",
-    data: updatedShelter,
-  });
-};
+  };
 
   // Remove employee from shelter
   removeEmployee = async (req, res) => {
@@ -632,60 +636,112 @@ addEmployee = async (req, res) => {
       data: updatedShelter,
     });
   };
+
+  // Get nearest shelters
+  getNearestShelters = async (req, res) => {
+    const { lng, lat, distance } = req.query;
+
+    if (!lng || !lat || !distance) {
+      return res.status(400).json({
+        success: false,
+        message: "lng, lat and distance are required",
+      });
+    }
+
+    const longitude = Number(lng);
+    const latitude = Number(lat);
+    const searchDistance = Number(distance);
+
+    if (
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(searchDistance)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "lng, lat and distance must be valid numbers",
+      });
+    }
+
+    if (longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        message: "Longitude must be between -180 and 180",
+      });
+    }
+
+    if (latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        message: "Latitude must be between -90 and 90",
+      });
+    }
+
+    if (searchDistance <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Distance must be greater than zero",
+      });
+    }
+
+    const shelters = await Shelter.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [longitude, latitude],
+          },
+          key: "location",
+          distanceField: "distanceInMeters",
+          maxDistance: searchDistance,
+          spherical: true,
+          query: {
+            verificationStatus: "approved",
+            isVerified: true,
+            isActive: true,
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          logo: 1,
+          address: 1,
+          city: 1,
+          phone: 1,
+          supportedSpecies: 1,
+
+          distanceInMeters: {
+            $round: ["$distanceInMeters", 0],
+          },
+
+          distanceInKm: {
+            $round: [
+              {
+                $divide: ["$distanceInMeters", 1000],
+              },
+              2,
+            ],
+          },
+        },
+      },
+      {
+        $sort: {
+          distanceInMeters: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        shelters.length > 0
+          ? "Nearest shelters retrieved successfully"
+          : "No nearby shelters found within this distance",
+      count: shelters.length,
+      data: shelters,
+    });
+  };
 }
-
 module.exports = new ShelterController();
-
-// Modified by Batoul - Reason: Task 5 - Create Nearest Shelter Search API
-const getNearestShelters = async (req, res) => {
-  try {
-      const { lng, lat, distance } = req.query;
-
-      if (!lng || !lat || !distance) {
-          return res.status(400).json({ 
-              success: false, 
-              message: "يرجى توفير خط الطول (lng)، خط العرض (lat)، والمسافة (distance)" 
-          });
-      }
-
-      const searchDistance = parseFloat(distance) / 2;
-
-      const shelters = await Shelter.find({
-          status: 'accepted',
-          isActive: true, 
-          location: {
-              $near: {
-                  $geometry: {
-                      type: "Point",
-                      coordinates: [parseFloat(lng), parseFloat(lat)]
-                  },
-                  $maxDistance: searchDistance
-              }
-          }
-      });
-
-      if (shelters.length === 0) {
-          return res.status(200).json({ 
-              success: true, 
-              message: "لا توجد ملاجئ قريبة ضمن هذه المسافة",
-              data: []
-          });
-      }
-
-      return res.status(200).json({ 
-          success: true, 
-          message: "تم العثور على الملاجئ القريبة بنجاح",
-          data: shelters
-      });
-
-  } catch (error) {
-      return res.status(500).json({ 
-          success: false, 
-          message: "حدث خطأ أثناء البحث عن الملاجئ", 
-          error: error.message 
-      });
-  }
-};
-
-
-module.exports.getNearestShelters = getNearestShelters;
