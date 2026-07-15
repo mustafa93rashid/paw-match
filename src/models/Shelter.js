@@ -70,7 +70,6 @@ const shelterSchema = new mongoose.Schema(
         enum: ["Point"],
         default: "Point",
       },
-
       coordinates: {
         type: [Number],
         default: undefined,
@@ -141,15 +140,17 @@ const shelterSchema = new mongoose.Schema(
     },
 
     operatingHours: {
-      open: {
-        type: String,
-        default: null,
+      type: {
+        open: {
+          type: String,
+          default: null,
+        },
+        close: {
+          type: String,
+          default: null,
+        },
       },
-
-      close: {
-        type: String,
-        default: null,
-      },
+      default: {},
     },
 
     socialLinks: {
@@ -157,12 +158,10 @@ const shelterSchema = new mongoose.Schema(
         type: String,
         default: null,
       },
-
       instagram: {
         type: String,
         default: null,
       },
-
       website: {
         type: String,
         default: null,
@@ -181,8 +180,6 @@ const shelterSchema = new mongoose.Schema(
       default: null,
     },
 
-    
-
     verifiedAt: {
       type: Date,
       default: null,
@@ -190,13 +187,10 @@ const shelterSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
-// البحث الجغرافي عن أقرب الملاجئ
 shelterSchema.index({ location: "2dsphere" });
-
-// تحسين البحث
 shelterSchema.index({ city: 1 });
 shelterSchema.index({ verificationStatus: 1, isActive: 1 });
 

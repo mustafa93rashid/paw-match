@@ -635,3 +635,57 @@ addEmployee = async (req, res) => {
 }
 
 module.exports = new ShelterController();
+
+// Modified by Batoul - Reason: Task 5 - Create Nearest Shelter Search API
+const getNearestShelters = async (req, res) => {
+  try {
+      const { lng, lat, distance } = req.query;
+
+      if (!lng || !lat || !distance) {
+          return res.status(400).json({ 
+              success: false, 
+              message: "يرجى توفير خط الطول (lng)، خط العرض (lat)، والمسافة (distance)" 
+          });
+      }
+
+      const searchDistance = parseFloat(distance) / 2;
+
+      const shelters = await Shelter.find({
+          status: 'accepted',
+          isActive: true, 
+          location: {
+              $near: {
+                  $geometry: {
+                      type: "Point",
+                      coordinates: [parseFloat(lng), parseFloat(lat)]
+                  },
+                  $maxDistance: searchDistance
+              }
+          }
+      });
+
+      if (shelters.length === 0) {
+          return res.status(200).json({ 
+              success: true, 
+              message: "لا توجد ملاجئ قريبة ضمن هذه المسافة",
+              data: []
+          });
+      }
+
+      return res.status(200).json({ 
+          success: true, 
+          message: "تم العثور على الملاجئ القريبة بنجاح",
+          data: shelters
+      });
+
+  } catch (error) {
+      return res.status(500).json({ 
+          success: false, 
+          message: "حدث خطأ أثناء البحث عن الملاجئ", 
+          error: error.message 
+      });
+  }
+};
+
+
+module.exports.getNearestShelters = getNearestShelters;

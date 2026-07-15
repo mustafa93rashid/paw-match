@@ -5,6 +5,10 @@ const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 const asyncHandler = require("../utils/asyncHandler");
 
+// Modified by Batoul - Reason: Task 5 - Added route for nearest shelters
+// ملاحظة: تم وضع الراوت هنا في الأعلى قبل الـ ID لتجنب أي تعارض
+router.get("/nearest", asyncHandler(shelterController.getNearestShelters));
+
 // Create a new shelter
 router.post("/", [auth, role(["superadmin", "shelterEmployee"])], asyncHandler(shelterController.createShelter));
 
