@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 const User = require("./models/User.js");
 const passwordService = require("./utils/passwordService");
 
-
 const MONGODB_URL = "mongodb://127.0.0.1:27017/pawmatch";
 
 const seedSuperAdmin = async () => {
@@ -12,7 +11,6 @@ const seedSuperAdmin = async () => {
 
   if (!admin) {
     const hashedPassword = await passwordService.hash("Admin@12345");
-
 
     admin = await User.create({
       firstName: "Super",
@@ -33,6 +31,7 @@ const seedSuperAdmin = async () => {
 
   return admin; 
 };
+
 const main = async () => {
   try {
     await mongoose.connect(MONGODB_URL);
