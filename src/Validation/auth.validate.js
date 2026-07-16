@@ -50,11 +50,60 @@ const signinValidation = [
   body("email")
     .trim()
     .notEmpty().withMessage("Email is required").bail()
-    .isEmail().withMessage("Invalid email or password"),
+    .isEmail().withMessage("Invalid"),
 
   body("password")
     .notEmpty().withMessage("Password is required").bail()
-    .isString().withMessage("Invalid email or password"),
+    .isString().withMessage("Invalid"),
+
+  validate,
+];
+
+const changePasswordValidation = [
+  body("currentPassword")
+    .notEmpty().withMessage("Current password is required").bail()
+    .isString().withMessage("Current password must be string"),
+
+  body("newPassword")
+    .notEmpty().withMessage("New password is required").bail()
+    .isString().withMessage("New password must be string").bail()
+    .isStrongPassword({
+      minLength: 8,
+      minNumbers: 1,
+      minUppercase: 1,
+      minLowercase: 1,
+      minSymbols: 1,
+    })
+    .withMessage(
+      "New password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number, and one symbol"
+    ),
+
+  validate,
+];
+
+const forgotPasswordValidation = [
+  body("email")
+    .trim()
+    .notEmpty().withMessage("Email is required").bail()  //note: bail is used to stop running validations if any of the previous ones have failed
+    .isEmail().withMessage("Please provide a valid email address"),
+
+  validate,
+];
+
+const resetPasswordValidation = [
+  body("newPassword")
+    .notEmpty().withMessage("New password is required").bail()
+    .isString().withMessage("Password must be string").bail()
+    .isStrongPassword({
+      minLength: 8,
+      minNumbers: 1,
+      minUppercase: 1,
+      minLowercase: 1,
+      minSymbols: 1,
+    })
+    .withMessage(
+      "New password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number, and one symbol"
+    ),
 
   validate,
 ];
@@ -62,4 +111,7 @@ const signinValidation = [
 module.exports = {
   signupValidation,
   signinValidation,
+  changePasswordValidation,
+  forgotPasswordValidation,
+  resetPasswordValidation,
 };
