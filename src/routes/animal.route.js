@@ -9,10 +9,6 @@ const getPaginatedAnimals = require("../utils/pagination");
 // Create animal
 router.post("/", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.createAnimal));
 
-//matching system
-router.get("/match", [auth], asyncHandler(animalController.getMatchedAnimals));
-
-
 // Get all animals
 router.get("/",  [auth, getPaginatedAnimals], asyncHandler(animalController.getAll));
 
