@@ -5,15 +5,12 @@ const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 
+const getPaginatedAnimals = require("../utils/pagination");
 // Create animal
 router.post("/", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.createAnimal));
 
-//matching system
-router.get("/match", [auth], asyncHandler(animalController.getMatchedAnimals));
-
-
 // Get all animals
-router.get("/", [auth], asyncHandler(animalController.getAll));
+router.get("/",  [auth, getPaginatedAnimals], asyncHandler(animalController.getAll));
 
 // Get animal by ID
 router.get("/:id", [auth], asyncHandler(animalController.getOne));

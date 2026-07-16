@@ -1,46 +1,53 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt"); 
-const User = require("./models/user.js");
+const User = require("./models/User.js");
+const passwordService = require("./utils/passwordService");
 
-const MONGODB_URL = "mongodb://127.0.0.1:27017/pawmatch"; 
+const MONGODB_URL = "mongodb://127.0.0.1:27017/pawmatch";
 
 const seedSuperAdmin = async () => {
-    try {
-        await mongoose.connect(MONGODB_URL);
-        console.log("Connected to MongoDB for seeding...");
+  const adminEmail = "admin@pawmatch.com";
 
-        const adminEmail = "admin@pawmatch.com";
-        const existingAdmin = await User.findOne({ email: adminEmail });
+  let admin = await User.findOne({ email: adminEmail });
 
-        if (!existingAdmin) {
-            
-            const hashedPassword = await bcrypt.hash("Admin@12345", 10);
+  if (!admin) {
+    const hashedPassword = await passwordService.hash("Admin@12345");
 
-          
-            await User.create({
-                firstName: "Super",
-                lastName: "Admin",
-                email: adminEmail,
-                password: hashedPassword,
-                phone: "07700000000",          
-                address: "Baghdad",        
-                gender: "male",               
-                dateOfBirth: new Date("2000-05-10"), 
-                role: "superadmin" 
-            });
+    admin = await User.create({
+      firstName: "Super",
+      lastName: "Admin",
+      email: adminEmail,
+      password: hashedPassword,
+      phone: "07700000000",
+      address: "Baghdad",
+      gender: "male",
+      dateOfBirth: new Date("2000-05-10"),
+      role: "superadmin",
+    });
 
-            console.log("✅ [SUCCESS]: Super Admin created successfully.");
-        } else {
-            console.log("⚠️ [INFO]: Super Admin already exists. No action taken.");
-        }
+    console.log("Super Admin created");
+  } else {
+    console.log(" Admin already exists");
+  }
 
-    } catch (error) {
-        console.error("❌ [ERROR]: Seeding failed:", error.message);
-    } finally {
-        await mongoose.disconnect();
-        console.log("Disconnected from MongoDB.");
-        process.exit(0);
-    }
+  return admin; 
 };
 
-seedSuperAdmin();
+const main = async () => {
+  try {
+    await mongoose.connect(MONGODB_URL);
+    console.log("MongoDB connected");
+
+    const admin = await seedSuperAdmin();
+
+    console.log(admin.email);
+
+    await mongoose.disconnect();
+    console.log("MongoDB disconnected");
+
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  }
+};
+
+main();

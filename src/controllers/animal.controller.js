@@ -2,12 +2,10 @@ const mongoose = require("mongoose");
 const Animal = require("../models/Animal");
 const Shelter = require("../models/Shelter");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
-const  {calculateMatchScore} = require("../services/matching.service");
+const { calculateMatchScore } = require("../services/matching.service");
 const AdopterProfile = require("../models/adopterProfile");
 
-
 class AnimalsController {
-
   // Get current shelter employee profile
   getEmployeeProfile = async (userId) => {
     const employeeProfile = await ShelterEmployeeProfile.findOne({
@@ -72,6 +70,26 @@ class AnimalsController {
           message: "Shelter ID is required",
         });
       }
+    }
+
+    const shelter = await Shelter.findById(shelterId);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    if (
+      shelter.verificationStatus !== "approved" ||
+      !shelter.isVerified ||
+      !shelter.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Animals can only be added to approved and active shelters",
+      });
     }
 
     const animal = await Animal.create({
@@ -183,7 +201,7 @@ class AnimalsController {
     const animals = await Animal.find(filter)
       .populate("shelterId", "name city address")
       .populate("addedBy", "firstName lastName email role")
-      .sort(sort);
+      .sort(sort).skip(skip)
 
     return res.status(200).json({
       success: true,
@@ -417,51 +435,7 @@ class AnimalsController {
       message: "Animal restored successfully",
       data: animal,
     });
-  }
-
-    // Matching Service 
-    getMatchedAnimals = async (req, res) => {
-    try {
-      // 1. جلب بروفايل المتبني
-      const adopter = await AdopterProfile.findOne({ userId: req.user._id });
-
-      if (!adopter) {
-        return res.status(404).json({
-          success: false,
-          message: "Adopter profile not found. Please complete your profile first.",
-        });
-      };
-
-      // 2. جلب الحيوانات المتاحة
-      const animals = await Animal.find({
-        adoptionStatus: "available",
-        isActive: true,
-      });
-
-      // 3. حساب التطابق
-      const matchedAnimals = animals.map((animal) => {
-        
-        const score =  calculateMatchScore(adopter, animal);
-        const animalObj = animal.toObject();
-        return { ...animalObj, matchPercentage: score };
-      });
-
-      // 4. الترتيب تنازلياً
-      matchedAnimals.sort((a, b) => b.matchPercentage - a.matchPercentage);
-
-      return res.status(200).json({
-        success: true,
-        count: matchedAnimals.length,
-        data: matchedAnimals,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: "Server Error: Failed to calculate animal matches",
-      });
-    }
   };
-  };
-
+}
 
 module.exports = new AnimalsController();
