@@ -19,7 +19,7 @@ app.use("/api/v1/user", require("./routes/user.route"));
 app.use("/api/v1/shelter", require("./routes/shelter.route"));
 
 
-app.use("/api/v1/debug-upload", require("./routes/test-upload.routes"));//this line is just for testin image upload
+// app.use("/api/v1/debug-upload", require("./routes/test-upload.routes"));//this line is just for testin image upload
 
 
 

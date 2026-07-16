@@ -3,7 +3,7 @@ const Animal = require("../models/Animal");
 const Shelter = require("../models/Shelter");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 const { calculateMatchScore } = require("../services/matching.service");
-const AdopterProfile = require("../models/adopterProfile");
+const AdopterProfile = require("../models/AdopterProfile");
 
 class AnimalsController {
   // Get current shelter employee profile
@@ -201,7 +201,6 @@ class AnimalsController {
     const animals = await Animal.find(filter)
       .populate("shelterId", "name city address")
       .populate("addedBy", "firstName lastName email role")
-      .sort(sort).skip(skip)
 
     return res.status(200).json({
       success: true,
