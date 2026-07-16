@@ -32,6 +32,10 @@ app.use("/api/v1/animals", require("./routes/animal.route"));
 // Image upload test routes
 app.use("/api/v1/adoptions", require("./routes/adoptionRequest.route"));
 
+//Appointment
+app.use("/api/v1/appointments", require("./routes/appointment.route"));
+
+
 // Error handling
 app.use(errorHandler);
 app.use(notFound);
