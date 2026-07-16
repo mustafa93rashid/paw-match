@@ -2,30 +2,193 @@ const User = require("../models/User");
 const jwtService = require("../utils/jwtService");
 const passwordService = require("../utils/passwordService");
 const cookiesService = require("../utils/cookiesService");
+const emailService = require("../services/email.service");
+const SignupVerification = require("../models/SignupVerification");
+const {generateVerificationCode,hashVerificationCode,verifyVerificationCode} = require("../utils/verificationCodeService");
 const crypto = require("crypto");
+const MAX_VERIFICATION_ATTEMPTS = 5;
+
 class AuthController {
+// ==================== Register New User ====================
   signup = async (req, res) => {
     const { firstName, lastName, email, password } = req.body;
 
-    const hashed = await passwordService.hash(password);
+    // Check if the email is already registered
+    const existingUser = await User.findOne({ email });
 
-    let user = await User.create({
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+      });
+    }
+
+    // Generate verification code
+    const verificationCode = generateVerificationCode();
+
+    // Hash sensitive data
+    const hashedPassword = await passwordService.hash(password);
+    const hashedVerificationCode = hashVerificationCode(verificationCode);
+
+    // Expiration dates
+    const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Save or update the temporary signup request
+    await SignupVerification.findOneAndUpdate(
+      { email },
+      {
+        $set: {
+          firstName,
+          lastName,
+          email,
+          password: hashedPassword,
+          verificationCode: hashedVerificationCode,
+          verificationCodeExpires,
+          verificationAttempts: 0,
+          expiresAt,
+        },
+      },
+      {
+        upsert: true,
+        returnDocument: "after",
+        runValidators: true,
+      },
+    );
+
+    // Send verification code
+    await emailService.sendSignupVerificationEmail({
+      to: email,
       firstName,
-      lastName,
-      email,
-      password: hashed,
+      verificationCode,
     });
 
-    user = user.toObject();
-    delete user.password;
-
-    res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "User registered successfully",
-      data: user,
+      message: "Verification code sent successfully",
+      data: {
+        email,
+        expiresInMinutes: 10,
+      },
     });
   };
 
+// ==================== Verify Signup ====================
+  verifySignup = async (req, res) => {
+    const { email, verificationCode } = req.body;
+
+    const signupRequest = await SignupVerification.findOne({
+      email,
+    }).select(
+      "+verificationCode +verificationCodeExpires +verificationAttempts",
+    );
+
+    // Check if the temporary signup request exists
+    if (!signupRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Signup verification request not found or expired",
+      });
+    }
+
+    // Check code expiration
+    if (
+      !signupRequest.verificationCodeExpires ||
+      signupRequest.verificationCodeExpires.getTime() < Date.now()
+    ) {
+      await SignupVerification.findByIdAndDelete(signupRequest._id);
+
+      return res.status(400).json({
+        success: false,
+        message: "Verification code has expired. Please signup again",
+      });
+    }
+
+    // Limit failed attempts for this signup request
+    if (signupRequest.verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+      await SignupVerification.findByIdAndDelete(signupRequest._id);
+
+      return res.status(429).json({
+        success: false,
+        message: "Too many invalid attempts. Please signup again",
+      });
+    }
+
+    const isValidCode = verifyVerificationCode(
+      verificationCode,
+      signupRequest.verificationCode,
+    );
+
+    if (!isValidCode) {
+      signupRequest.verificationAttempts += 1;
+
+      await signupRequest.save({
+        validateBeforeSave: false,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification code",
+        remainingAttempts:
+          MAX_VERIFICATION_ATTEMPTS - signupRequest.verificationAttempts,
+      });
+    }
+
+    // Ensure the email is still available
+    const userExists = await User.exists({ email });
+
+    if (userExists) {
+      await SignupVerification.findByIdAndDelete(signupRequest._id);
+
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+      });
+    }
+
+    let user;
+
+    try {
+      // Create the account after successful verification
+      user = await User.create({
+        firstName: signupRequest.firstName,
+        lastName: signupRequest.lastName,
+        email: signupRequest.email,
+        password: signupRequest.password,
+        role: "adopter",
+        isActive: true,
+      });
+    } catch (error) {
+      if (error.code !== 11000) {
+        throw error;
+      }
+
+      await SignupVerification.findByIdAndDelete(signupRequest._id);
+
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+      });
+    }
+
+    // Remove the temporary request after account creation
+    await SignupVerification.findByIdAndDelete(signupRequest._id);
+
+    const userResponse = user.toObject();
+
+    delete userResponse.password;
+    delete userResponse.passwordResetToken;
+    delete userResponse.passwordResetExpires;
+
+    return res.status(201).json({
+      success: true,
+      message: "Email verified and account registered successfully",
+      data: userResponse,
+    });
+  };
+
+// ==================== Sign In ====================
   signin = async (req, res) => {
     const { email, password } = req.body;
 
@@ -41,12 +204,12 @@ class AuthController {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
-      if (!user.isActive) {
-    return res.status(403).json({
-      success: false,
-      message: "Account is inactive",
-    });
-  }
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Account is inactive",
+      });
+    }
 
     const payload = {
       id: user._id,
@@ -63,13 +226,14 @@ class AuthController {
     cookiesService.setAccessToken(res, token);
     cookiesService.setRefreshToken(res, refreshToken);
 
-  return res.status(200).json({
-    success: true,
-    message: "User signed in successfully",
-    data: user,
-  });
+    return res.status(200).json({
+      success: true,
+      message: "User signed in successfully",
+      data: user,
+    });
   };
 
+// ==================== Logout User ====================
   logout = async (req, res) => {
     cookiesService.clearTokens(res);
     res.status(200).json({
@@ -77,12 +241,11 @@ class AuthController {
     });
   };
 
-
-
+// ==================== Change Password for Authenticated User ====================
   changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
-    const userId = req.user?._id || req.user?.id;
+    const userId = req.user?._id;
 
     if (!userId) {
       return res.status(401).json({
@@ -136,23 +299,16 @@ class AuthController {
     });
   };
 
+// ==================== Forgot Password ====================
   forgotPassword = async (req, res) => {
     const { email } = req.body;
 
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required",
-      });
-    }
-
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    });
-
     const responseMessage =
-      "If an account exists with this email, a password reset link has been generated";
+      "If an account exists for this email address, you will receive password reset instructions shortly.";
 
+    const user = await User.findOne({ email });
+
+    // Return the same response to avoid exposing registered emails
     if (!user) {
       return res.status(200).json({
         success: true,
@@ -160,6 +316,7 @@ class AuthController {
       });
     }
 
+    // Generate and hash the reset token
     const resetToken = crypto.randomBytes(32).toString("hex");
 
     const hashedToken = crypto
@@ -168,41 +325,58 @@ class AuthController {
       .digest("hex");
 
     user.passwordResetToken = hashedToken;
-
     user.passwordResetExpires = Date.now() + 15 * 60 * 1000;
 
     await user.save({
       validateBeforeSave: false,
     });
 
-    const resetUrl =
-      `${req.protocol}://${req.get("host")}` +
-      `/api/v1/auth/reset-password/${resetToken}`;
+    // Create the frontend reset URL
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
-    console.log("Password reset URL:", resetUrl);
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+
+    try {
+      // Send the password reset email
+      await emailService.sendPasswordResetEmail({
+        to: user.email,
+        firstName: user.firstName,
+        resetUrl,
+      });
+    } catch (error) {
+      // Remove the token if email delivery fails
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+
+      await user.save({
+        validateBeforeSave: false,
+      });
+
+      throw error;
+    }
 
     return res.status(200).json({
       success: true,
       message: responseMessage,
-
-      // للتجربة فقط، احذفه عند استخدام الإيميل
-      resetUrl,
     });
   };
 
+// ==================== Reset Password ====================
   resetPassword = async (req, res) => {
     const { token } = req.params;
     const { newPassword } = req.body;
 
-    const hashedToken = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest("hex");
+    // Hash the received token
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
+    // Find the user with a valid reset token
     const user = await User.findOne({
       passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() },
-    });
+      passwordResetExpires: {
+        $gt: Date.now(),
+      },
+      isActive: true,
+    }).select("+password");
 
     if (!user) {
       return res.status(400).json({
@@ -211,12 +385,28 @@ class AuthController {
       });
     }
 
+    // Prevent using the current password again
+    const isSamePassword = await passwordService.compare(
+      newPassword,
+      user.password,
+    );
+
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from your current password",
+      });
+    }
+
+    // Update password
     user.password = await passwordService.hash(newPassword);
+
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
 
     await user.save();
 
+    // Clear authentication cookies
     cookiesService.clearTokens(res);
 
     return res.status(200).json({
@@ -225,6 +415,7 @@ class AuthController {
     });
   };
 
+// ==================== Refresh Access Token Using Refresh Token ====================
   refreshToken = async (req, res) => {
     const refreshToken = cookiesService.getRefreshToken(req);
 

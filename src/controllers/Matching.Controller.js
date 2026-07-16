@@ -1,5 +1,5 @@
 const Animal = require("../models/Animal");
-const AdopterProfile = require("../models/adopterProfile");
+const AdopterProfile = require("../models/AdopterProfile");
 
 /*
 |--------------------------------------------------------------------------
