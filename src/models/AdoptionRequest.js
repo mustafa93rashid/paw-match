@@ -67,7 +67,9 @@ const adoptionRequestSchema = new mongoose.Schema(
   },
 );
 
-module.exports = mongoose.model(
+module.exports = 
+ mongoose.models.AdoptionRequest ||
+ mongoose.model(
   "AdoptionRequest",
   adoptionRequestSchema,
 );
