@@ -201,7 +201,7 @@ class AnimalsController {
     const animals = await Animal.find(filter)
       .populate("shelterId", "name city address")
       .populate("addedBy", "firstName lastName email role")
-      .sort(sort);
+      .sort(sort).skip(skip)
 
     return res.status(200).json({
       success: true,
