@@ -5,6 +5,7 @@ const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 const { calculateMatchScore } = require("../services/matching.service");
 const AdopterProfile = require("../models/adopterProfile");
 const { uploadBufferToCloudinary, deleteImage, deleteImages } = require("../services/cloudinary.service");
+
 class AnimalsController {
   // Get current shelter employee profile
   getEmployeeProfile = async (userId) => {
@@ -226,7 +227,6 @@ class AnimalsController {
     const animals = await Animal.find(filter)
       .populate("shelterId", "name city address")
       .populate("addedBy", "firstName lastName email role")
-      .sort(sort).skip(skip)
 
     return res.status(200).json({
       success: true,

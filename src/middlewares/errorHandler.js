@@ -1,6 +1,7 @@
 const multer = require('multer');
 
 const errorHandler = (err, req, res, next) => {
+
   if (res.headersSent) {
     return next(err);
   }
@@ -44,9 +45,15 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  return res.status(err?.statusCode || 500).json({
+  
+  console.error(err.stack);
+
+  res.status(err.statusCode || 500).json({
     success: false,
-    message: err?.message || 'Internal Server Error',
+    message: err.message || "Internal Server Error",
+    ...(process.env.NODE_ENV === "development" && {
+      stack: err.stack,
+    })
   });
 };
 

@@ -18,7 +18,18 @@ const signinLimiter = rateLimit({
   },
 });
 
+const verifySignupLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: {
+    success: false,
+    message:
+      "Too many verification attempts. Please try again later.",
+  },
+});
+
 module.exports = {
   signupLimiter,
   signinLimiter,
+  verifySignupLimiter,
 };
