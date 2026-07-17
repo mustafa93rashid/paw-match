@@ -5,6 +5,7 @@ const userController = require("../controllers/user.controller");
 const asyncHandler = require("../utils/asyncHandler");
 const role = require("../middlewares/role");
 const auth = require("../middlewares/auth");
+const { uploadSingle } = require("../middlewares/upload.middleware");
 
 // Get current user profile
 router.get("/profile", [auth], asyncHandler(userController.profile));
@@ -27,4 +28,21 @@ router.put("/:id/status", [auth, role(["superadmin"])], asyncHandler(userControl
 //zain إنشاء مستخدم جديد وبروفايله الخاص بواسطة السوبر أدمن فقط
 router.post("/create-user", [auth, role(["superadmin"])],asyncHandler(userController.adminCreateUser));
 
+router.patch(
+  "/profile/image",
+  [auth, uploadSingle("image")],
+  asyncHandler(userController.uploadProfileImage),
+);
+
+router.patch(
+  "/profile/image/replace",
+  [auth, uploadSingle("image")],
+  asyncHandler(userController.replaceProfileImage),
+);
+
+router.delete(
+  "/profile/image",
+  [auth],
+  asyncHandler(userController.deleteProfileImage),
+);
 module.exports = router;

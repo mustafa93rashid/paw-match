@@ -6,7 +6,6 @@ const cookies = require("cookie-parser");
 const errorHandler = require("./middlewares/errorHandler");
 const notFound = require("./middlewares/notFound");
 const xssSanitize = require("./middlewares/xss");
-
 app.use(express.json());
 app.use(require("morgan")("dev"));
 app.use(cookies());

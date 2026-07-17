@@ -3,6 +3,7 @@ const User = require("../models/User");
 const AdopterProfile = require("../models/AdopterProfile");
 const VetProfile = require("../models/VetProfile");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
+const { uploadBufferToCloudinary, deleteImage } = require("../services/cloudinary.service");
 //zain
 const passwordService = require("../utils/passwordService");
 class UsersController {
@@ -241,6 +242,128 @@ const user = await User.findById(req.user._id).select("-password");
       success: true,
       message: "Profile updated successfully",
       data: userData,
+    });
+  };
+    buildUploadedImage = (result) => ({
+    url: result.secure_url,
+    publicId: result.public_id,
+  });
+
+  uploadProfileImage = async (req, res) => {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.profileImage) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image already exists. Use replace endpoint.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image is required",
+      });
+    }
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "user",
+      originalName: req.file.originalname,
+    });
+
+    try {
+      user.profileImage = this.buildUploadedImage(uploaded);
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile image uploaded successfully",
+        data: user,
+      });
+    } catch (error) {
+      await deleteImage(uploaded.public_id);
+      throw error;
+    }
+  };
+
+  replaceProfileImage = async (req, res) => {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image is required",
+      });
+    }
+
+    const oldImage = user.profileImage;
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "user",
+      originalName: req.file.originalname,
+    });
+
+    try {
+      user.profileImage = this.buildUploadedImage(uploaded);
+      await user.save();
+
+      if (oldImage?.publicId) {
+        await deleteImage(oldImage.publicId);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile image replaced successfully",
+        data: user,
+      });
+    } catch (error) {
+      await deleteImage(uploaded.public_id);
+      throw error;
+    }
+  };
+
+  deleteProfileImage = async (req, res) => {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.profileImage) {
+      return res.status(404).json({
+        success: false,
+        message: "Profile image not found",
+      });
+    }
+
+    const oldImage = user.profileImage;
+    await deleteImage(oldImage.publicId);
+    user.profileImage = null;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile image deleted successfully",
+      data: user,
     });
   };
   // zain hussein - دالة إنشاء مستخدم وبروفايل بواسطة السوبر أدمن

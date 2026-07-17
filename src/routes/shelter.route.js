@@ -4,7 +4,7 @@ const shelterController = require("../controllers/shelter.controller");
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 const asyncHandler = require("../utils/asyncHandler");
-
+const { uploadSingle, uploadArray } = require("../middlewares/upload.middleware");
 // Modified by Batoul - Reason: Task 5 - Added route for nearest shelters
 // ملاحظة: تم وضع الراوت هنا في الأعلى قبل الـ ID لتجنب أي تعارض
 router.get("/nearest", asyncHandler(shelterController.getNearestShelters));
@@ -41,5 +41,33 @@ router.patch("/:id/employees", [auth, role(["superadmin", "shelterEmployee"])], 
 
 // Remove employee from shelter
 router.delete("/:id/employees/:employeeId", [auth, role(["superadmin", "shelterEmployee"])], asyncHandler(shelterController.removeEmployee));
+router.patch(
+  "/:id/logo",
+  [auth, role(["superadmin", "shelterEmployee"]), uploadSingle("image")],
+  asyncHandler(shelterController.uploadLogo),
+);
 
+router.patch(
+  "/:id/logo/replace",
+  [auth, role(["superadmin", "shelterEmployee"]), uploadSingle("image")],
+  asyncHandler(shelterController.replaceLogo),
+);
+
+router.delete(
+  "/:id/logo",
+  [auth, role(["superadmin", "shelterEmployee"])],
+  asyncHandler(shelterController.deleteLogo),
+);
+
+router.post(
+  "/:id/images",
+  [auth, role(["superadmin", "shelterEmployee"]), uploadArray("images", 10)],
+  asyncHandler(shelterController.addShelterImages),
+);
+
+router.delete(
+  "/:id/images/:publicId",
+  [auth, role(["superadmin", "shelterEmployee"])],
+  asyncHandler(shelterController.deleteShelterImage),
+);
 module.exports = router;

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const imageSchema = require("../models/image_schema");
 
 const shelterSchema = new mongoose.Schema(
   {
@@ -25,12 +26,12 @@ const shelterSchema = new mongoose.Schema(
     },
 
     logo: {
-      type: String,
+      type: imageSchema,
       default: null,
     },
 
     images: {
-      type: [String],
+      type: [imageSchema],
       default: [],
     },
 

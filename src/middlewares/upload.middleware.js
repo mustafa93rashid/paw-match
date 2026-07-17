@@ -1,62 +1,34 @@
 const multer = require('multer');
-const path = require('path');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const cloudinary = require('../config/cloudinary');
+const { allowedMimeTypes } = require('../services/cloudinary.service');
 
-// Allowed folders only
-const allowedFolders = ['user', 'animal', 'shelter'];
-
-// File filter for security
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    return cb(null, true);
+  }
 
-    if (allowedTypes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Only JPEG, PNG, GIF, and WebP images are allowed'), false);
-    }
+  return cb(new Error('Only JPEG, PNG, GIF, and WebP images are allowed'), false);
 };
-const createCloudUpload = (folder) => {
-    if (!allowedFolders.includes(folder)) {
-        throw new Error('Invalid folder. Use user, animal, or shelter');
-    }
 
-    const cloudStorage = new CloudinaryStorage({
-        cloudinary: cloudinary,
-        params: {
-            folder:`paw-match/${folder}`,
-            resource_type: 'image',
-            format:"webp",
-            public_id: (req, file) => {
-                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                const fileExtension = path.extname(file.originalname);
-                const baseName = path.basename(file.originalname, fileExtension);
-                const safeFileName = baseName.replace(/[^a-zA-Z0-9]/g, '_');
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 10,
+  },
+});
 
-                // optional custom name from req.body.fileName
-                if (req.body && req.body.fileName) {
-                    return req.body.fileName.replace(/[^a-zA-Z0-9]/g, '_') + '-' + uniqueSuffix;
-                }
+const uploadSingle = (fieldName) => upload.single(fieldName);
+const uploadArray = (fieldName, maxCount = 10) => upload.array(fieldName, maxCount);
+// Middleware for handling multiple file fields with different names.
+// Example: shelter logo (single image) and gallery images (multiple images)
+// Each field has its own name and maximum number of allowed files.
+const uploadFields = (fields) => upload.fields(fields);
 
-                return safeFileName + '-' + uniqueSuffix;
-            },
-            transformation: [
-                { width: 800, height: 800, crop: 'limit' },
-                { quality: 'auto' },
-                { fetch_format: 'auto' }
-            ]
-        }
-    });
-
-    return multer({
-        storage: cloudStorage,
-        fileFilter: fileFilter,
-        limits: {
-            fileSize: 5 * 1024 * 1024,
-        }
-    });
-};
 
 module.exports = {
-    createCloudUpload
+  uploadSingle,
+  uploadArray,
+  uploadFields,
+  fileFilter,
 };

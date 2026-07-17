@@ -4,11 +4,24 @@ const animalController = require("../controllers/animal.controller");
 const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
-
+const { uploadArray } = require("../middlewares/upload.middleware");
 const getPaginatedAnimals = require("../utils/pagination");
-// Create animal
-router.post("/", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.createAnimal));
 
+// Create animal
+router.post("/", [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 10)], asyncHandler(animalController.createAnimal));
+
+
+router.post(
+  "/:id/images",
+  [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 10)],
+  asyncHandler(animalController.addAnimalImages),
+);
+
+router.delete(
+  "/:id/images/:publicId",
+  [auth, role(["shelterEmployee", "superadmin"])],
+  asyncHandler(animalController.deleteAnimalImage),
+);
 // Get all animals
 router.get("/",  [auth, getPaginatedAnimals], asyncHandler(animalController.getAll));
 

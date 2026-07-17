@@ -1,7 +1,7 @@
 // models/Animal.js
 
 const mongoose = require("mongoose");
-
+const imageSchema = require("../models/image_schema");
 const animalSchema = new mongoose.Schema(
   {
     name: {
@@ -88,11 +88,10 @@ const animalSchema = new mongoose.Schema(
       maxlength: [1000, "Description must not exceed 1000 characters"],
       default: null,
     },
-
-    images: {
-      type: [String],
-      validate: {
-        validator(images) {
+  images: {
+    type: [imageSchema],
+    validate: {
+      validator(images) {
           return Array.isArray(images) && images.length > 0;
         },
         message: "At least one animal image is required",

@@ -1,86 +1,80 @@
-//this file is just for testin image upload
+// this file is just for testing image upload
 const router = require("express").Router();
-const cloudinary = require("../config/cloudinary");
-
-const { createCloudUpload } = require("../middlewares/upload.middleware");
-const { UploadedImage,UploadedImages,deleteCloudFile } = require("../services/upload.service");
-
+const { uploadSingle, uploadArray } = require("../middlewares/upload.middleware");
+const { uploadBufferToCloudinary, deleteImage } = require("../services/cloudinary.service");
 
 router.post(
   "/single",
-  createCloudUpload('animal').single("image"),
-
-  async (req, res) => {
+  uploadSingle("image"),
+  async (req, res, next) => {
     try {
-  console.log("BEFORE MULTER");
-      const image = UploadedImage(req.file);
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "Image is required" });
+      }
+
+      const uploaded = await uploadBufferToCloudinary({
+        buffer: req.file.buffer,
+        folder: "animal",
+        originalName: req.file.originalname,
+      });
+
       res.status(200).json({
         success: true,
         message: "Image uploaded successfully",
-        data: image
+        data: { url: uploaded.secure_url, publicId: uploaded.public_id },
       });
-
     } catch (error) {
-
-      res.status(400).json({
-        success: false,
-        message: error.message
-      });
-
+      next(error);
     }
-  }
+  },
 );
 
 router.post(
   "/multi",
-  createCloudUpload('user').array("images"),
-
-  async (req, res) => {
+  uploadArray("images", 10),
+  async (req, res, next) => {
     try {
-      const image = UploadedImages(req.files);
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ success: false, message: "Images are required" });
+      }
+
+      const uploaded = [];
+      for (const file of req.files) {
+        const result = await uploadBufferToCloudinary({
+          buffer: file.buffer,
+          folder: "user",
+          originalName: file.originalname,
+        });
+        uploaded.push({ url: result.secure_url, publicId: result.public_id });
+      }
+
       res.status(200).json({
         success: true,
         message: "Images uploaded successfully",
-        data: image
+        data: uploaded,
       });
-
     } catch (error) {
-
-      res.status(400).json({
-        success: false,
-        message: error.message
-      });
-
+      next(error);
     }
-  }
+  },
 );
+
 router.delete(
   "/delete",
-
-  async (req, res) => {
+  async (req, res, next) => {
     try {
-
       const { public_id } = req.query;
-
-      const result = await deleteCloudFile(public_id);
-
+      const result = await deleteImage(public_id);
 
       res.status(200).json({
         success: true,
         message: "Image deleted successfully",
-        result
+        result,
       });
-
-
     } catch (error) {
-
-      console.log("DELETE ERROR:", error.message);
-      res.status(400).json({
-        success: false,
-        message: error.message
-      });
-
+      next(error);
     }
-  }
+  },
 );
+
 module.exports = router;

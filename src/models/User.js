@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-
+const imageSchema= require("../models/image_schema");
 const userSchema = new mongoose.Schema(
   {
     firstName: {
@@ -52,7 +52,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-
+    profileImage: {
+      type: imageSchema,
+      // default: null,
+    },
     role: {
       type: String,
       enum: ["superadmin", "shelterEmployee", "vet", "adopter"],
@@ -69,6 +72,8 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+  
+
   },
   {
     timestamps: true,
