@@ -5,7 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 const { uploadArray } = require("../middlewares/upload.middleware");
-const getPaginatedAnimals = require("../utils/pagination");
+const pagination = require("../middlewares/pagination");
 
 // Create animal
 router.post("/", [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 10)], asyncHandler(animalController.createAnimal));
@@ -23,7 +23,7 @@ router.delete(
   asyncHandler(animalController.deleteAnimalImage),
 );
 // Get all animals
-router.get("/",  [auth, getPaginatedAnimals], asyncHandler(animalController.getAll));
+router.get("/",  [auth, pagination], asyncHandler(animalController.getAll));
 
 // Get animal by ID
 router.get("/:id", [auth], asyncHandler(animalController.getOne));
