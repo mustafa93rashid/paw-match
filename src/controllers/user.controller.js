@@ -345,7 +345,7 @@ class UsersController {
     // ==================================================
 
     const { firstName, lastName, email, password, role } = req.body;
-    
+
     // Check if the email is already registered
     const existingUser = await User.findOne({
       email: normalizedEmail,

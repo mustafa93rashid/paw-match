@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    
+
     password: {
       type: String,
       required: [true, "Password is required"],
@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
     dateOfBirth: {
       type: Date,
     },
-    
+
     gender: {
       type: String,
       enum: ["male", "female"],
