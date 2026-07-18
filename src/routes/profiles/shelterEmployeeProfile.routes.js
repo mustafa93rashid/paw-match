@@ -1,17 +1,23 @@
 const express = require("express");
 const router = express.Router();
-const shelterEmployeeProfileController = require("../../controllers/shelterEmployeeProfile.controller",);
+
+const shelterEmployeeProfileController = require("../../controllers/shelterEmployeeProfile.controller");
 const auth = require("../../middlewares/auth");
 const role = require("../../middlewares/role");
 const asyncHandler = require("../../utils/asyncHandler");
 
+const { updateEmployeeWorkDataValidation, getShelterEmployeeByUserIdValidation } = require("../../validation/shelterEmployeeProfile.validate");
 
-router.get("/me", [auth], role(["shelterEmployee"]),asyncHandler(shelterEmployeeProfileController.getMyProfile),);
+// get authenticated shelter employee profile
+router.get("/me", [auth, role(["shelterEmployee"])], asyncHandler(shelterEmployeeProfileController.getMyProfile));
 
-router.put("/me", [auth], role(["shelterEmployee"]),asyncHandler(shelterEmployeeProfileController.updateEmployeeWorkData),);
+// update shelter employee work data
+router.put("/:userId/work-data", [auth, role(["superadmin"]), updateEmployeeWorkDataValidation], asyncHandler(shelterEmployeeProfileController.updateEmployeeWorkData));
 
-router.get("/", [auth], role(["superadmin"]),asyncHandler(shelterEmployeeProfileController.getAll),);
+// get all shelter employee profiles
+router.get("/", [auth, role(["superadmin"])], asyncHandler(shelterEmployeeProfileController.getAll));
 
-router.get("/:id", [auth], role(["superadmin"]),asyncHandler(shelterEmployeeProfileController.getOne),);
+// get shelter employee profile by User ID
+router.get("/:userId", [auth, role(["superadmin"]), getShelterEmployeeByUserIdValidation], asyncHandler(shelterEmployeeProfileController.getOne));
 
 module.exports = router;
