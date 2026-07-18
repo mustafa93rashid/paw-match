@@ -8,7 +8,7 @@ const asyncHandler = require("../../utils/asyncHandler");
 
 router.get("/me", [auth], role(["shelterEmployee"]),asyncHandler(shelterEmployeeProfileController.getMyProfile),);
 
-router.put("/me", [auth], role(["shelterEmployee"]),asyncHandler(shelterEmployeeProfileController.updateMyProfile),);
+router.put("/me", [auth], role(["shelterEmployee"]),asyncHandler(shelterEmployeeProfileController.updateEmployeeWorkData),);
 
 router.get("/", [auth], role(["superadmin"]),asyncHandler(shelterEmployeeProfileController.getAll),);
 

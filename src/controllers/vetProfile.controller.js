@@ -35,57 +35,67 @@ class VetProfileController {
   };
 
   // Update current vet profile
-  updateMyProfile = async (req, res) => {
-    const currentUserId = req.user._id || req.user.id;
+// Update current vet profile
+updateMyProfile = async (req, res) => {
+  const currentUserId = req.user.id;
 
-    const allowedFields = [
-      "specialization",
-      "bio",
-      "experienceYears",
-      "availableDays",
-      "consultationTypes",
-    ];
+  const allowedFields = [
+    "specialization",
+    "bio",
+    "experienceYears",
+    "availableDays",
+    "consultationTypes",
+  ];
 
-    const updateData = {};
+  const updateData = {};
 
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) {
-        updateData[field] = req.body[field];
-      }
-    });
-
-    const profile = await VetProfile.findOneAndUpdate(
-      {
-        userId: currentUserId,
-      },
-      updateData,
-      {
-        new: true,
-        runValidators: true,
-      },
-    )
-      .populate(
-        "userId",
-        "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
-      )
-      .populate(
-        "shelterId",
-        "name email phone address city logo isActive",
-      );
-
-    if (!profile) {
-      return res.status(404).json({
-        success: false,
-        message: "Vet profile not found",
-      });
+  allowedFields.forEach((field) => {
+    if (req.body[field] !== undefined) {
+      updateData[field] = req.body[field];
     }
+  });
 
-    return res.status(200).json({
-      success: true,
-      message: "Vet profile updated successfully",
-      data: profile,
+  if (Object.keys(updateData).length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "No valid vet profile fields provided",
     });
-  };
+  }
+
+  const profile = await VetProfile.findOneAndUpdate(
+    {
+      userId: currentUserId,
+    },
+    {
+      $set: updateData,
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .populate(
+      "userId",
+      "firstName lastName email phone dateOfBirth gender address role isActive",
+    )
+    .populate(
+      "shelterId",
+      "name email phone address city logo isActive",
+    );
+
+  if (!profile) {
+    return res.status(404).json({
+      success: false,
+      message: "Vet profile not found",
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Vet profile updated successfully",
+    data: profile,
+  });
+};
 
   // Get all active vets
   getAll = async (req, res) => {
