@@ -1,12 +1,17 @@
-// controllers/shelterEmployeeProfile.controller.js
-
-const ShelterEmployeeProfile = require(
-  "../models/ShelterEmployeeProfile",
-);
+const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 
 class ShelterEmployeeProfileController {
-  // Get the current shelter employee profile
+  // ==================================================
+  // Get authenticated shelter employee profile
+  // ==================================================
   getMyProfile = async (req, res) => {
+    // ==================================================
+    // • Retrieves the authenticated shelter employee profile.
+    // • Loads the related user personal information.
+    // • Loads the shelter assigned to the employee.
+    // • Returns 404 if the employee profile does not exist.
+    // ==================================================
+
     const profile = await ShelterEmployeeProfile.findOne({
       userId: req.user._id,
     })
@@ -30,97 +35,44 @@ class ShelterEmployeeProfileController {
     });
   };
 
-  // Update the current shelter employee profile
-updateEmployeeWorkData = async (req, res) => {
-  const { employeeId } = req.params;
+  // ==================================================
+  // Update shelter employee work data
+  // ==================================================
+  updateEmployeeWorkData = async (req, res) => {
+    // ==================================================
+    // • Allows the Super Admin to update employee work information.
+    // • Updates the employee position, number, and hire date.
+    // • Searches for the employee profile using the User ID.
+    // • Prevents duplicate employee numbers inside the same shelter.
+    // • Access is restricted to Super Admin only.
+    // ==================================================
 
-  const allowedFields = [
-    "position",
-    "employeeNumber",
-    "hireDate",
-  ];
+    const { userId } = req.params;
 
-  const updateData = {};
+    const allowedFields = ["position", "employeeNumber", "hireDate"];
 
-  allowedFields.forEach((field) => {
-    if (req.body[field] !== undefined) {
-      updateData[field] = req.body[field];
-    }
-  });
+    const updateData = {};
 
-  if (Object.keys(updateData).length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "No valid employment fields provided",
-    });
-  }
-
-  const employeeProfile = await ShelterEmployeeProfile.findOne({
-    userId: employeeId,
-  });
-
-  if (!employeeProfile) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter employee profile not found",
-    });
-  }
-
-  // السوبر أدمن يستطيع تعديل بيانات أي موظف
-  if (req.user.role !== "superadmin") {
-    const managerProfile = await ShelterEmployeeProfile.findOne({
-      userId: req.user.id,
-      position: "Manager",
-      isActive: true,
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
     });
 
-    if (!managerProfile) {
-      return res.status(403).json({
+    const employeeProfile = await ShelterEmployeeProfile.findOne({
+      userId,
+    });
+
+    if (!employeeProfile) {
+      return res.status(404).json({
         success: false,
-        message:
-          "Only shelter managers can update employment information",
+        message: "Shelter employee profile not found",
       });
     }
 
-    if (!managerProfile.shelterId) {
-      return res.status(403).json({
-        success: false,
-        message: "Manager is not assigned to a shelter",
-      });
-    }
-
-    if (!employeeProfile.shelterId) {
-      return res.status(403).json({
-        success: false,
-        message: "Employee is not assigned to a shelter",
-      });
-    }
-
-    const belongsToSameShelter =
-      String(managerProfile.shelterId) ===
-      String(employeeProfile.shelterId);
-
-    if (!belongsToSameShelter) {
-      return res.status(403).json({
-        success: false,
-        message: "You can only update employees in your shelter",
-      });
-    }
-
-    const isUpdatingSelf =
-      String(employeeProfile.userId) === String(req.user.id);
-
-    if (isUpdatingSelf && updateData.position !== undefined) {
-      return res.status(403).json({
-        success: false,
-        message: "Managers cannot change their own position",
-      });
-    }
-  }
-
-  if (updateData.employeeNumber) {
-    const duplicateEmployeeNumber =
-      await ShelterEmployeeProfile.findOne({
+    // Check if the employee number is already used in the same shelter
+    if (updateData.employeeNumber) {
+      const duplicateEmployeeNumber = await ShelterEmployeeProfile.findOne({
         shelterId: employeeProfile.shelterId,
         employeeNumber: updateData.employeeNumber,
         _id: {
@@ -128,40 +80,48 @@ updateEmployeeWorkData = async (req, res) => {
         },
       });
 
-    if (duplicateEmployeeNumber) {
-      return res.status(409).json({
-        success: false,
-        message: "Employee number is already used in this shelter",
-      });
+      if (duplicateEmployeeNumber) {
+        return res.status(409).json({
+          success: false,
+          message: "Employee number is already used in this shelter",
+        });
+      }
     }
-  }
 
-  Object.assign(employeeProfile, updateData);
+    // Apply the provided work information to the employee profile
+    Object.assign(employeeProfile, updateData);
 
-  await employeeProfile.save();
+    await employeeProfile.save();
 
-  await employeeProfile.populate(
-    "userId",
-    "firstName lastName email phone dateOfBirth gender address role isActive",
-  );
+    await employeeProfile.populate(
+      "userId",
+      "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
+    );
 
-  await employeeProfile.populate(
-    "shelterId",
-    "name address city phone email",
-  );
+    await employeeProfile.populate(
+      "shelterId",
+      "name address city phone email",
+    );
 
-  return res.status(200).json({
-    success: true,
-    message: "Employee work information updated successfully",
-    data: employeeProfile,
-  });
-};
+    return res.status(200).json({
+      success: true,
+      message: "Employee work information updated successfully",
+      data: employeeProfile,
+    });
+  };
 
+  // ==================================================
   // Get all shelter employee profiles
+  // ==================================================
   getAll = async (req, res) => {
-    const profiles = await ShelterEmployeeProfile.find({
-      isActive: true,
-    })
+    // ==================================================
+    // • Retrieves all shelter employee profiles.
+    // • Loads the related user information for each employee.
+    // • Loads the shelter assigned to each employee.
+    // • Access is restricted to Super Admin only.
+    // ==================================================
+
+    const profiles = await ShelterEmployeeProfile.find()
       .populate(
         "userId",
         "firstName lastName email phone address profileImage role isActive",
@@ -176,11 +136,21 @@ updateEmployeeWorkData = async (req, res) => {
     });
   };
 
-  // Get one shelter employee profile by profile ID
+  // ==================================================
+  // Get shelter employee profile by User ID
+  // ==================================================
   getOne = async (req, res) => {
-    const profile = await ShelterEmployeeProfile.findById(
-      req.params._id,
-    )
+    // ==================================================
+    // • Retrieves a shelter employee profile using the User ID.
+    // • Loads the related user personal information.
+    // • Loads the shelter assigned to the employee.
+    // • Returns 404 if the employee profile does not exist.
+    // • Access is restricted to Super Admin only.
+    // ==================================================
+
+    const profile = await ShelterEmployeeProfile.findOne({
+      userId: req.params.userId,
+    })
       .populate(
         "userId",
         "firstName lastName email phone dateOfBirth gender address profileImage role isActive",

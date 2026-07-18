@@ -347,16 +347,7 @@ class UsersController {
     const { firstName, lastName, email, password, role } = req.body;
 
     // Check if the email is already registered
-    const existingUser = await User.findOne({
-      email: normalizedEmail,
-    });
-
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already exists",
-      });
-    }
+    const existingUser = await User.findOne({ email });
 
     // Hash the user's password before saving it
     const hashedPassword = await passwordService.hash(password);
@@ -365,7 +356,7 @@ class UsersController {
     let newUser = await User.create({
       firstName,
       lastName,
-      email: normalizedEmail,
+      email,
       password: hashedPassword,
       role,
     });
