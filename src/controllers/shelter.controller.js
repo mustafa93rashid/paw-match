@@ -851,7 +851,13 @@ class ShelterController {
       {
         $set: {
           shelterId: null,
+          position: "Employee",
+          employeeNumber: null,
+          hireDate: null,
         },
+      },
+      {
+        runValidators: true,
       },
     );
 
