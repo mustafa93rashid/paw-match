@@ -1,12 +1,19 @@
-// controllers/vetProfile.controller.js
-
-const mongoose = require("mongoose");
 const VetProfile = require("../models/VetProfile");
 
 class VetProfileController {
-  // Get current vet profile
+  // ==================================================
+  // Get authenticated vet profile
+  // ==================================================
   getMyProfile = async (req, res) => {
-    const currentUserId = req.user._id 
+    // ==================================================
+    // • Retrieves the authenticated vet profile.
+    // • Loads the related user personal information.
+    // • Loads the shelter assigned to the vet.
+    // • Returns 404 if the vet profile does not exist.
+    // • Access is restricted to authenticated vets only.
+    // ==================================================
+
+    const currentUserId = req.user._id;
 
     const profile = await VetProfile.findOne({
       userId: currentUserId,
@@ -34,71 +41,84 @@ class VetProfileController {
     });
   };
 
-  // Update current vet profile
-// Update current vet profile
-updateMyProfile = async (req, res) => {
-  const currentUserId = req.user.id;
+  // ==================================================
+  // Update authenticated vet profile
+  // ==================================================
+  updateMyProfile = async (req, res) => {
+    // ==================================================
+    // • Allows the authenticated vet to update professional data.
+    // • Updates specialization, bio, experience, availability,
+    //   and consultation types.
+    // • Prevents updating protected profile fields.
+    // • Returns 404 if the vet profile does not exist.
+    // • Access is restricted to authenticated vets only.
+    // ==================================================
 
-  const allowedFields = [
-    "specialization",
-    "bio",
-    "experienceYears",
-    "availableDays",
-    "consultationTypes",
-  ];
+    const currentUserId = req.user._id;
 
-  const updateData = {};
+    const allowedFields = [
+      "specialization",
+      "bio",
+      "experienceYears",
+      "availableDays",
+      "consultationTypes",
+    ];
 
-  allowedFields.forEach((field) => {
-    if (req.body[field] !== undefined) {
-      updateData[field] = req.body[field];
-    }
-  });
+    const updateData = {};
 
-  if (Object.keys(updateData).length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "No valid vet profile fields provided",
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
     });
-  }
 
-  const profile = await VetProfile.findOneAndUpdate(
-    {
-      userId: currentUserId,
-    },
-    {
-      $set: updateData,
-    },
-    {
-      new: true,
-      runValidators: true,
-    },
-  )
-    .populate(
-      "userId",
-      "firstName lastName email phone dateOfBirth gender address role isActive",
+    const profile = await VetProfile.findOneAndUpdate(
+      {
+        userId: currentUserId,
+      },
+      {
+        $set: updateData,
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
     )
-    .populate(
-      "shelterId",
-      "name email phone address city logo isActive",
-    );
+      .populate(
+        "userId",
+        "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
+      )
+      .populate(
+        "shelterId",
+        "name email phone address city logo isActive",
+      );
 
-  if (!profile) {
-    return res.status(404).json({
-      success: false,
-      message: "Vet profile not found",
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "Vet profile not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Vet profile updated successfully",
+      data: profile,
     });
-  }
+  };
 
-  return res.status(200).json({
-    success: true,
-    message: "Vet profile updated successfully",
-    data: profile,
-  });
-};
-
-  // Get all active vets
+  // ==================================================
+  // Get all active vet profiles
+  // ==================================================
   getAll = async (req, res) => {
+    // ==================================================
+    // • Retrieves all active vet profiles.
+    // • Supports filtering by shelter and specialization.
+    // • Loads the related user and shelter information.
+    // • Sorts the results from newest to oldest.
+    // • Access requires authentication.
+    // ==================================================
+
     const { shelterId, specialization } = req.query;
 
     const filter = {
@@ -106,13 +126,6 @@ updateMyProfile = async (req, res) => {
     };
 
     if (shelterId) {
-      if (!mongoose.Types.ObjectId.isValid(shelterId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid shelter ID",
-        });
-      }
-
       filter.shelterId = shelterId;
     }
 
@@ -132,7 +145,9 @@ updateMyProfile = async (req, res) => {
         "shelterId",
         "name email phone address city logo isActive",
       )
-      .sort({ createdAt: -1 });
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json({
       success: true,
@@ -142,18 +157,23 @@ updateMyProfile = async (req, res) => {
     });
   };
 
-  // Get vet by profile ID
+  // ==================================================
+  // Get vet profile by User ID
+  // ==================================================
   getOne = async (req, res) => {
-    const { id } = req.params;
+    // ==================================================
+    // • Retrieves a vet profile using the User ID.
+    // • Loads the related user personal information.
+    // • Loads the shelter assigned to the vet.
+    // • Returns 404 if the vet profile does not exist.
+    // • Access requires authentication.
+    // ==================================================
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid vet profile ID",
-      });
-    }
+    const { userId } = req.params;
 
-    const profile = await VetProfile.findById(id)
+    const profile = await VetProfile.findOne({
+      userId,
+    })
       .populate(
         "userId",
         "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
