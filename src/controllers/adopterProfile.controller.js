@@ -1,8 +1,15 @@
-
 const AdopterProfile = require("../models/AdopterProfile");
-
 class AdopterProfileController {
+  // ==================================================
+  // Get authenticated adopter profile
+  // ==================================================
   getMyProfile = async (req, res) => {
+    // ==================================================
+    // • Retrieves the authenticated adopter profile.
+    // • Loads the related user information.
+    // • Returns 404 if the profile does not exist.
+    // ==================================================
+
     const profile = await AdopterProfile.findOne({
       userId: req.user.id,
     }).populate(
@@ -24,62 +31,70 @@ class AdopterProfileController {
     });
   };
 
-updateMyProfile = async (req, res) => {
-  const allowedFields = [
-    "homeType",
-    "hasKids",
-    "hasOtherPets",
-    "experienceLevel",
-    "dailyActivityLevel",
-    "isAllergic",
-    "ownerType",
-    "preferredSpecies",
-  ];
+  // ==================================================
+  // Create or update authenticated adopter profile
+  // ==================================================
+  updateMyProfile = async (req, res) => {
+    // ==================================================
+    // • Allows updating only approved profile fields.
+    // • Ignores any fields outside the whitelist.
+    // • Creates the profile automatically if it does not exist.
+    // • Runs Mongoose validation before saving.
+    // • Returns the updated profile with user information.
+    // ==================================================
 
-  const updateData = {};
+    const allowedFields = [
+      "homeType",
+      "hasKids",
+      "hasOtherPets",
+      "experienceLevel",
+      "dailyActivityLevel",
+      "isAllergic",
+      "ownerType",
+    ];
 
-  allowedFields.forEach((field) => {
-    if (req.body[field] !== undefined) {
-      updateData[field] = req.body[field];
-    }
-  });
+    const updateData = {};
 
-  if (Object.keys(updateData).length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "No valid adopter profile fields provided",
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
     });
-  }
 
-  const profile = await AdopterProfile.findOneAndUpdate(
-    {
-      userId: req.user.id,
-    },
-    {
-      $set: updateData,
-      $setOnInsert: {
+    const profile = await AdopterProfile.findOneAndUpdate(
+      {
         userId: req.user.id,
       },
-    },
-    {
-      new: true,
-      runValidators: true,
-      upsert: true,
-      setDefaultsOnInsert: true,
-    },
-  ).populate(
-    "userId",
-    "firstName lastName email phone dateOfBirth gender address role isActive",
-  );
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      },
+    ).populate(
+      "userId",
+      "firstName lastName email phone dateOfBirth gender address profileImage role",
+    );
 
-  return res.status(200).json({
-    success: true,
-    message: "Adopter profile updated successfully",
-    data: profile,
-  });
-};
+    return res.status(200).json({
+      success: true,
+      message: "Adopter profile updated successfully",
+      data: profile,
+    });
+  };
 
+  // ==================================================
+  // Get all adopter profiles
+  // ==================================================
   getAllAdopters = async (req, res) => {
+    // ==================================================
+    // • Retrieves all adopter profiles.
+    // • Loads related user information for each profile.
+    // • Returns the total number of profiles.
+    // • Accessible by Super Admin only.
+    // ==================================================
+
     const profiles = await AdopterProfile.find().populate(
       "userId",
       "firstName lastName email phone address profileImage role isActive",
@@ -93,10 +108,22 @@ updateMyProfile = async (req, res) => {
     });
   };
 
-  getAdopterById = async (req, res) => {
-    const profile = await AdopterProfile.findById(req.params.id).populate(
+  // ==================================================
+  // Get adopter profile by user ID
+  // ==================================================
+  getAdopterByUserId = async (req, res) => {
+    // ==================================================
+    // • Retrieves an adopter profile using the user's ID.
+    // • Loads the related user information.
+    // • Returns 404 if the profile does not exist.
+    // • Accessible by Super Admin and Shelter Employee.
+    // ==================================================
+
+    const profile = await AdopterProfile.findOne({
+      userId: req.params.userId,
+    }).populate(
       "userId",
-      "firstName lastName email phone address profileImage role isActive",
+      "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
     );
 
     if (!profile) {
@@ -112,7 +139,6 @@ updateMyProfile = async (req, res) => {
       data: profile,
     });
   };
-
 }
 
 module.exports = new AdopterProfileController();
