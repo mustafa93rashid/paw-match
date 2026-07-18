@@ -6,6 +6,7 @@ const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 
 const getPaginatedAnimals = require("../utils/pagination");
+
 // Create animal
 router.post("/", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.createAnimal));
 
