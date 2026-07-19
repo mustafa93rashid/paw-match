@@ -6,18 +6,21 @@ const adoptionRequestSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
     animalId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Animal",
       required: true,
+      index: true,
     },
 
     shelterId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shelter",
       required: true,
+      index: true,
     },
 
     message: {
@@ -38,6 +41,7 @@ const adoptionRequestSchema = new mongoose.Schema(
         "completed",
       ],
       default: "pendingReview",
+      index: true,
     },
 
     rejectionReason: {
@@ -57,6 +61,16 @@ const adoptionRequestSchema = new mongoose.Schema(
       default: null,
     },
 
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+
     completedAt: {
       type: Date,
       default: null,
@@ -67,9 +81,28 @@ const adoptionRequestSchema = new mongoose.Schema(
   },
 );
 
-module.exports = 
- mongoose.models.AdoptionRequest ||
- mongoose.model(
-  "AdoptionRequest",
-  adoptionRequestSchema,
-);
+// Improve queries related to the adopter
+adoptionRequestSchema.index({
+  adopterId: 1,
+  createdAt: -1,
+});
+
+// Improve queries related to the shelter
+adoptionRequestSchema.index({
+  shelterId: 1,
+  status: 1,
+  createdAt: -1,
+});
+
+// Improve queries related to the animal
+adoptionRequestSchema.index({
+  animalId: 1,
+  status: 1,
+});
+
+module.exports =
+  mongoose.models.AdoptionRequest ||
+  mongoose.model(
+    "AdoptionRequest",
+    adoptionRequestSchema,
+  );
