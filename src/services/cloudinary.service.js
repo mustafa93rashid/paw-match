@@ -1,15 +1,32 @@
-const { Readable } = require('stream');
-const cloudinary = require('../config/cloudinary');
+const { Readable } = require("stream");
+const cloudinary = require("../config/cloudinary");
 
-const allowedFolders = ['user', 'animal', 'shelter'];
-const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const allowedFolders = [
+  "user",
+  "shelterLogo",
+  "shelterImage",
+  "animal",
+];
+
+const allowedMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
+
+const folderMap = {
+  user: "paw-match/users",
+  shelterLogo: "paw-match/shelters/logos",
+  shelterImage: "paw-match/shelters/images",
+  animal: "paw-match/animals",
+};
 
 const sanitizeBaseName = (value) =>
-  String(value || 'image')
+  String(value || "image")
     .trim()
-    .replace(/\.[^/.]+$/, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'image';
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "image";
 
 const buildPublicId = (folder, originalName) => {
   const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
@@ -23,28 +40,25 @@ const uploadBufferToCloudinary = ({
   publicId,
 }) => {
   if (!buffer) {
-    throw new Error('File buffer is required');
+    throw new Error("File buffer is required");
   }
 
   if (!allowedFolders.includes(folder)) {
-    throw new Error('Invalid upload folder');
+    throw new Error("Invalid upload folder");
   }
 
   const finalPublicId = publicId || buildPublicId(folder, originalName);
-// upload_stream() doesn't upload the image by itself.
-//  It simply creates a writable stream (an upload channel) and opens a connection to Cloudinary,
-//  waiting for data to be sent.
-//  The actual image upload starts only when the image buffer is piped into that stream using
+
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: `paw-match/${folder}`,
+        folder: folderMap[folder],
         public_id: finalPublicId,
-        resource_type: 'image',
+        resource_type: "image",
         transformation: [
-          { width: 800, height: 800, crop: 'limit' },
-          { quality: 'auto' },
-          { fetch_format: 'auto' },
+          { width: 800, height: 800, crop: "limit" },
+          { quality: "auto" },
+          { fetch_format: "auto" },
         ],
       },
       (error, result) => {
@@ -55,18 +69,17 @@ const uploadBufferToCloudinary = ({
         return resolve(result);
       },
     );
-//  The actual image upload starts only when the image buffer is piped into that stream using
 
-    Readable.from(buffer).on('error', reject).pipe(uploadStream);
+    Readable.from(buffer).on("error", reject).pipe(uploadStream);
   });
 };
 
 const deleteImage = async (publicId) => {
   if (!publicId) {
-    throw new Error('publicId is required');
+    throw new Error("publicId is required");
   }
 
-  return cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+  return cloudinary.uploader.destroy(publicId, { resource_type: "image" });
 };
 
 const deleteImages = async (publicIds = []) => {

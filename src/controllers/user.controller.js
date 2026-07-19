@@ -313,6 +313,14 @@ class UsersController {
         message: "User not found",
       });
     }
+    const { firstName, lastName, phone, address } = req.body;
+
+    const updateData = {
+      firstName,
+      lastName,
+      phone,
+      address,
+    };
 
     // Update the user's profile information
     Object.assign(user, updateData);
@@ -338,123 +346,163 @@ class UsersController {
     publicId: result.public_id,
   });
 
-  uploadProfileImage = async (req, res) => {
-    const user = await User.findById(req.user._id);
+uploadProfileImage = async (req, res) => {
+  const user = await User.findById(req.user._id);
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
 
-    if (user.profileImage) {
-      return res.status(400).json({
-        success: false,
-        message: "Profile image already exists. Use replace endpoint.",
-      });
-    }
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Profile image is required",
+    });
+  }
 
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Profile image is required",
-      });
-    }
+  if (user.profileImage) {
+    return res.status(400).json({
+      success: false,
+      message: "Profile image already exists. Use replace endpoint.",
+    });
+  }
 
-    const uploaded = await uploadBufferToCloudinary({
+  let uploaded = null;
+
+  try {
+    uploaded = await uploadBufferToCloudinary({
       buffer: req.file.buffer,
       folder: "user",
       originalName: req.file.originalname,
     });
 
-    try {
-      user.profileImage = this.buildUploadedImage(uploaded);
-      await user.save();
+    user.profileImage = this.buildUploadedImage(uploaded);
 
-      return res.status(200).json({
-        success: true,
-        message: "Profile image uploaded successfully",
-        data: user,
-      });
-    } catch (error) {
-      await deleteImage(uploaded.public_id);
-      throw error;
-    }
-  };
-
-  replaceProfileImage = async (req, res) => {
-    const user = await User.findById(req.user._id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Profile image is required",
-      });
-    }
-
-    const oldImage = user.profileImage;
-
-    const uploaded = await uploadBufferToCloudinary({
-      buffer: req.file.buffer,
-      folder: "user",
-      originalName: req.file.originalname,
-    });
-
-    try {
-      user.profileImage = this.buildUploadedImage(uploaded);
-      await user.save();
-
-      if (oldImage?.publicId) {
-        await deleteImage(oldImage.publicId);
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Profile image replaced successfully",
-        data: user,
-      });
-    } catch (error) {
-      await deleteImage(uploaded.public_id);
-      throw error;
-    }
-  };
-
-  deleteProfileImage = async (req, res) => {
-    const user = await User.findById(req.user._id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    if (!user.profileImage) {
-      return res.status(404).json({
-        success: false,
-        message: "Profile image not found",
-      });
-    }
-
-    const oldImage = user.profileImage;
-    await deleteImage(oldImage.publicId);
-    user.profileImage = null;
     await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile image uploaded successfully",
+      data: user,
+    });
+
+  } catch (error) {
+
+    if (uploaded) {
+      await deleteImage(uploaded.public_id);
+    }
+
+    throw error;
+  }
+};
+
+ replaceProfileImage = async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  if (!user.profileImage) {
+    return res.status(404).json({
+      success: false,
+      message: "Profile image not found",
+    });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Profile image is required",
+    });
+  }
+
+  const oldImage = user.profileImage;
+
+  let uploaded = null;
+
+  try {
+
+    uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "user",
+      originalName: req.file.originalname,
+    });
+
+
+    user.profileImage = this.buildUploadedImage(uploaded);
+
+    await user.save();
+
+
+    if (oldImage?.publicId) {
+      await deleteImage(oldImage.publicId);
+    }
+
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile image replaced successfully",
+      data: user,
+    });
+
+
+  } catch (error) {
+
+    if (uploaded) {
+      await deleteImage(uploaded.public_id);
+    }
+
+    throw error;
+  }
+};
+  deleteProfileImage = async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  if (!user.profileImage) {
+    return res.status(404).json({
+      success: false,
+      message: "Profile image not found",
+    });
+  }
+
+  const oldImage = user.profileImage;
+
+  try {
+
+    await deleteImage(oldImage.publicId);
+
+    user.profileImage = null;
+
+    await user.save();
+
 
     return res.status(200).json({
       success: true,
       message: "Profile image deleted successfully",
       data: user,
     });
-  };
+
+
+  } catch (error) {
+
+    throw error;
+
+  }
+};
   // zain hussein - دالة إنشاء مستخدم وبروفايل بواسطة السوبر أدمن
 
   // ==================================================
@@ -475,7 +523,12 @@ class UsersController {
 
     // Check if the email is already registered
     const existingUser = await User.findOne({ email });
-
+    if (existingUser) {
+      return res.status(400).json({
+        success:false,
+        message:"Email already exists",
+      });
+    }
     // Hash the user's password before saving it
     const hashedPassword = await passwordService.hash(password);
 

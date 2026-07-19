@@ -1327,158 +1327,495 @@ class ShelterController {
       data: shelters,
     });
   };
-    canManageShelter = (shelter, user) => {
-    const currentUserId = String(user._id);
-    return String(shelter.createdBy) === currentUserId || user.role === "superadmin";
-  };
-
+  
   buildUploadedImage = (result) => ({
     url: result.secure_url,
     publicId: result.public_id,
   });
 
-  uploadLogo = async (req, res) => {
-    const shelter = await Shelter.findById(req.params.id);
+uploadLogo = async (req, res) => {
+  const shelter = await Shelter.findById(req.params.id);
 
-    if (!shelter) {
-      return res.status(404).json({ success: false, message: "Shelter not found" });
-    }
+  if (!shelter) {
+    return res.status(404).json({
+      success: false,
+      message: "Shelter not found",
+    });
+  }
 
-    if (!this.canManageShelter(shelter, req.user)) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this shelter" });
-    }
+  const canManage = await checkShelterEmployeePermission({
+    user: req.user,
+    shelter,
+  });
 
-    if (shelter.logo) {
-      return res.status(400).json({ success: false, message: "Logo already exists. Use replace endpoint." });
-    }
+  if (!canManage) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not allowed to update this shelter",
+    });
+  }
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: "Logo image is required" });
-    }
+  if (shelter.logo) {
+    return res.status(400).json({
+      success: false,
+      message: "Logo already exists. Use replace endpoint",
+    });
+  }
 
-    const uploaded = await uploadBufferToCloudinary({ buffer: req.file.buffer, folder: "shelter", originalName: req.file.originalname });
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Logo image is required",
+    });
+  }
 
-    try {
-      shelter.logo = this.buildUploadedImage(uploaded);
-      await shelter.save();
 
-      return res.status(200).json({ success: true, message: "Shelter logo uploaded successfully", data: shelter });
-    } catch (error) {
-      await deleteImage(uploaded.public_id);
-      throw error;
-    }
-  };
+  let uploadedImage = null;
 
-  replaceLogo = async (req, res) => {
-    const shelter = await Shelter.findById(req.params.id);
+  try {
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "shelterLogo",
+      originalName: req.file.originalname,
+    });
 
-    if (!shelter) {
-      return res.status(404).json({ success: false, message: "Shelter not found" });
-    }
 
-    if (!this.canManageShelter(shelter, req.user)) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this shelter" });
-    }
+    uploadedImage = this.buildUploadedImage(uploaded);
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: "Logo image is required" });
-    }
+    shelter.logo = uploadedImage;
 
-    const oldLogo = shelter.logo;
-    const uploaded = await uploadBufferToCloudinary({ buffer: req.file.buffer, folder: "shelter", originalName: req.file.originalname });
-
-    try {
-      shelter.logo = this.buildUploadedImage(uploaded);
-      await shelter.save();
-
-      if (oldLogo?.publicId) {
-        await deleteImage(oldLogo.publicId);
-      }
-
-      return res.status(200).json({ success: true, message: "Shelter logo replaced successfully", data: shelter });
-    } catch (error) {
-      await deleteImage(uploaded.public_id);
-      throw error;
-    }
-  };
-
-  deleteLogo = async (req, res) => {
-    const shelter = await Shelter.findById(req.params.id);
-
-    if (!shelter) {
-      return res.status(404).json({ success: false, message: "Shelter not found" });
-    }
-
-    if (!this.canManageShelter(shelter, req.user)) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this shelter" });
-    }
-
-    if (!shelter.logo) {
-      return res.status(404).json({ success: false, message: "Logo not found" });
-    }
-
-    await deleteImage(shelter.logo.publicId);
-    shelter.logo = null;
     await shelter.save();
 
-    return res.status(200).json({ success: true, message: "Shelter logo deleted successfully", data: shelter });
-  };
 
-  addShelterImages = async (req, res) => {
-    const shelter = await Shelter.findById(req.params.id);
+    return res.status(200).json({
+      success: true,
+      message: "Shelter logo uploaded successfully",
+      data: shelter,
+    });
 
-    if (!shelter) {
-      return res.status(404).json({ success: false, message: "Shelter not found" });
+
+  } catch (error) {
+
+    if (uploadedImage?.publicId) {
+      await deleteImage(uploadedImage.publicId);
     }
 
-    if (!this.canManageShelter(shelter, req.user)) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this shelter" });
+    throw error;
+  }
+};
+replaceLogo = async (req, res) => {
+
+  const shelter = await Shelter.findById(req.params.id);
+
+
+  if (!shelter) {
+    return res.status(404).json({
+      success:false,
+      message:"Shelter not found",
+    });
+  }
+
+
+  const canManage = await checkShelterEmployeePermission({
+    user:req.user,
+    shelter,
+  });
+
+
+  if (!canManage) {
+    return res.status(403).json({
+      success:false,
+      message:"You are not allowed to update this shelter",
+    });
+  }
+
+
+  if (!shelter.logo) {
+    return res.status(404).json({
+      success:false,
+      message:"Logo not found. Use upload endpoint",
+    });
+  }
+
+
+  if (!req.file) {
+    return res.status(400).json({
+      success:false,
+      message:"Logo image is required",
+    });
+  }
+
+
+  const oldLogo = shelter.logo;
+
+  let newLogo = null;
+
+
+  try {
+
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer:req.file.buffer,
+      folder:"shelterLogo",
+      originalName:req.file.originalname,
+    });
+
+
+    newLogo = this.buildUploadedImage(uploaded);
+
+
+    shelter.logo = newLogo;
+
+
+    await shelter.save();
+
+
+
+    if(oldLogo?.publicId){
+      await deleteImage(oldLogo.publicId);
     }
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: "At least one image is required" });
+
+
+    return res.status(200).json({
+      success:true,
+      message:"Shelter logo replaced successfully",
+      data:shelter,
+    });
+
+
+
+  } catch(error){
+
+
+    if(newLogo?.publicId){
+      await deleteImage(newLogo.publicId);
     }
 
-    const uploadedImages = [];
-    try {
-      for (const file of req.files) {
-        const uploaded = await uploadBufferToCloudinary({ buffer: file.buffer, folder: "shelter", originalName: file.originalname });
-        uploadedImages.push(this.buildUploadedImage(uploaded));
-      }
 
-      shelter.images.push(...uploadedImages);
-      await shelter.save();
+    throw error;
+  }
 
-      return res.status(200).json({ success: true, message: "Shelter images added successfully", data: shelter });
-    } catch (error) {
-      await deleteImages(uploadedImages.map((image) => image.publicId));
-      throw error;
-    }
-  };
+};
 
-  deleteShelterImage = async (req, res) => {
-    const shelter = await Shelter.findById(req.params.id);
+deleteLogo = async(req,res)=>{
 
-    if (!shelter) {
-      return res.status(404).json({ success: false, message: "Shelter not found" });
-    }
 
-    if (!this.canManageShelter(shelter, req.user)) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this shelter" });
-    }
+ const shelter = await Shelter.findById(req.params.id);
 
-    const { publicId } = req.params;
 
-    const imageIndex = shelter.images.findIndex((img) => String(img.publicId) === String(publicId));
-    if (imageIndex === -1) {
-      return res.status(404).json({ success: false, message: "Image not found" });
-    }
+ if(!shelter){
+  return res.status(404).json({
+   success:false,
+   message:"Shelter not found",
+  });
+ }
 
+
+ const canManage = await checkShelterEmployeePermission({
+  user:req.user,
+  shelter,
+ });
+
+
+ if(!canManage){
+  return res.status(403).json({
+   success:false,
+   message:"You are not allowed to update this shelter",
+  });
+ }
+
+
+ if(!shelter.logo){
+  return res.status(404).json({
+   success:false,
+   message:"Logo not found",
+  });
+ }
+
+
+ const publicId = shelter.logo.publicId;
+
+
+
+ try{
+  if (publicId) {
     await deleteImage(publicId);
-    shelter.images.splice(imageIndex, 1);
-    await shelter.save();
+  }
+  await deleteImage(publicId);
 
-    return res.status(200).json({ success: true, message: "Shelter image deleted successfully", data: shelter });
-  };
+
+  shelter.logo=null;
+
+
+  await shelter.save();
+
+
+
+  return res.status(200).json({
+   success:true,
+   message:"Shelter logo deleted successfully",
+   data:shelter,
+  });
+
+
+
+ }catch(error){
+
+  throw error;
+
+ }
+
+
+};
+addShelterImages = async (req,res)=>{
+
+
+ const shelter = await Shelter.findById(req.params.id);
+
+
+ if(!shelter){
+  return res.status(404).json({
+    success:false,
+    message:"Shelter not found",
+  });
+ }
+
+
+
+ const canManage = await checkShelterEmployeePermission({
+  user:req.user,
+  shelter,
+ });
+
+
+ if(!canManage){
+  return res.status(403).json({
+   success:false,
+   message:"You are not allowed to update this shelter",
+  });
+ }
+
+
+
+ if(!req.files || req.files.length===0){
+  return res.status(400).json({
+   success:false,
+   message:"At least one image is required",
+  });
+ }
+
+
+
+ const uploadedImages=[];
+
+
+ try{
+
+
+  for(const file of req.files){
+
+
+   const uploaded = await uploadBufferToCloudinary({
+    buffer:file.buffer,
+    folder:"shelterImage",
+    originalName:file.originalname,
+   });
+
+
+   uploadedImages.push(
+    this.buildUploadedImage(uploaded)
+   );
+
+  }
+
+
+
+  shelter.images.push(...uploadedImages);
+
+
+  await shelter.save();
+
+
+
+  return res.status(200).json({
+   success:true,
+   message:"Shelter images added successfully",
+   data:shelter,
+  });
+
+
+
+ }catch(error){
+
+
+  await deleteImages(
+   uploadedImages.map(
+    image=>image.publicId
+   )
+  );
+
+
+  throw error;
+
+ }
+
+};
+
+ deleteShelterImage = async(req,res)=>{
+
+
+ const shelter = await Shelter.findById(req.params.id);
+
+
+ if(!shelter){
+  return res.status(404).json({
+   success:false,
+   message:"Shelter not found",
+  });
+ }
+
+
+
+ const canManage = await checkShelterEmployeePermission({
+  user:req.user,
+  shelter,
+ });
+
+
+ if(!canManage){
+  return res.status(403).json({
+   success:false,
+   message:"You are not allowed to update this shelter",
+  });
+ }
+
+
+
+ const {imageId}=req.params;
+
+
+
+ const imageIndex = shelter.images.findIndex(
+  img=>String(img._id)===String(imageId)
+ );
+
+
+ if(imageIndex===-1){
+  return res.status(404).json({
+   success:false,
+   message:"Image not found",
+  });
+ }
+
+
+
+ const image = shelter.images[imageIndex];
+
+
+
+ try{
+
+
+  await deleteImage(image.publicId);
+
+
+
+  shelter.images.splice(imageIndex,1);
+
+
+
+  await shelter.save();
+
+
+
+  return res.status(200).json({
+   success:true,
+   message:"Shelter image deleted successfully",
+   data:shelter,
+  });
+
+
+
+ }catch(error){
+
+  throw error;
+
+ }
+
+
+};
+deleteAllShelterImages = async(req,res)=>{
+
+
+ const shelter = await Shelter.findById(req.params.id);
+
+
+ if(!shelter){
+  return res.status(404).json({
+   success:false,
+   message:"Shelter not found",
+  });
+ }
+
+
+
+ const canManage = await checkShelterEmployeePermission({
+  user:req.user,
+  shelter,
+ });
+
+
+ if(!canManage){
+  return res.status(403).json({
+   success:false,
+   message:"You are not allowed to update this shelter",
+  });
+ }
+
+
+
+ if(!shelter.images || shelter.images.length===0){
+  return res.status(404).json({
+   success:false,
+   message:"No shelter images found",
+  });
+ }
+
+
+
+ try{
+
+
+  await deleteImages(
+   shelter.images.map(
+    image=>image.publicId
+   )
+  );
+
+
+  shelter.images=[];
+
+
+  await shelter.save();
+
+
+
+  return res.status(200).json({
+   success:true,
+   message:"All shelter images deleted successfully",
+   data:shelter,
+  });
+
+
+
+ }catch(error){
+
+  throw error;
+
+ }
+
+
+};
 }
 module.exports = new ShelterController();

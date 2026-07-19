@@ -52,9 +52,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    profileImage: {
+   profileImage: {
       type: imageSchema,
-      // default: null,
+      default: null,
     },
     role: {
       type: String,

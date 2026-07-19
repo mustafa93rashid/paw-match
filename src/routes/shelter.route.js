@@ -1,7 +1,7 @@
 const router = require("express").Router();
 
 const shelterController = require("../controllers/shelter.controller");
-const shelterValidation = require("../validation/shelter.validate");
+const shelterValidation = require("../Validation/shelter.validate");
 
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
@@ -56,13 +56,13 @@ router.delete(
   asyncHandler(shelterController.removeEmployee)
 );
 
-router.patch(
+router.post(
   "/:id/logo",
   [auth, role(["superadmin", "shelterEmployee"]), uploadSingle("image")],
   asyncHandler(shelterController.uploadLogo)
 );
 router.patch(
-  "/:id/logo/replace",
+  "/:id/logo",
   [auth, role(["superadmin", "shelterEmployee"]), uploadSingle("image")],
   asyncHandler(shelterController.replaceLogo),
 );
@@ -75,13 +75,19 @@ router.delete(
 
 router.post(
   "/:id/images",
-  [auth, role(["superadmin", "shelterEmployee"]), uploadArray("images", 10)],
+  [auth, role(["superadmin", "shelterEmployee"]), uploadArray("images", 8)],
   asyncHandler(shelterController.addShelterImages),
 );
 
 router.delete(
-  "/:id/images/:publicId",
+  "/:id/images/:imageId",
   [auth, role(["superadmin", "shelterEmployee"])],
   asyncHandler(shelterController.deleteShelterImage),
+);
+
+router.delete(
+  "/:id/images",
+  [auth, role(["superadmin", "shelterEmployee"])],
+  asyncHandler(shelterController.deleteAllShelterImages),
 );
 module.exports = router;

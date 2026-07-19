@@ -1,9 +1,25 @@
 const mongoose = require("mongoose");
+
 const imageSchema = new mongoose.Schema(
   {
-    url: String,//: String { type: String, required: true },
-    publicId: String // { type: String, required: true },
+    url: {
+      type: String,
+      required: true,
+      default: null,
+    },
+    publicId: {
+      type: String,
+      required: true,
+      default: null,
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false,
+    },
   },
-  { _id: false },
+  {
+    _id: true,
+  }
 );
+
 module.exports = imageSchema;

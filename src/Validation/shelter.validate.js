@@ -137,26 +137,26 @@ const createShelterValidation = [
     .matches(/^[0-9+\-\s()]+$/)
     .withMessage("Shelter phone contains invalid characters"),
 
-  body("logo")
-    .optional({ nullable: true, checkFalsy: true })
-    .isURL({
-      protocols: ["http", "https"],
-      require_protocol: true,
-    })
-    .withMessage("Logo must be a valid URL"),
+  // body("logo")
+  //   .optional({ nullable: true, checkFalsy: true })
+  //   .isURL({
+  //     protocols: ["http", "https"],
+  //     require_protocol: true,
+  //   })
+  //   .withMessage("Logo must be a valid URL"),
 
-  body("images")
-    .optional()
-    .isArray({ max: 10 })
-    .withMessage("Images must be an array containing at most 10 items"),
+  // body("images")
+  //   .optional()
+  //   .isArray({ max: 10 })
+  //   .withMessage("Images must be an array containing at most 10 items"),
 
-  body("images.*")
-    .optional()
-    .isURL({
-      protocols: ["http", "https"],
-      require_protocol: true,
-    })
-    .withMessage("Each shelter image must be a valid URL"),
+  // body("images.*")
+  //   .optional()
+  //   .isURL({
+  //     protocols: ["http", "https"],
+  //     require_protocol: true,
+  //   })
+  //   .withMessage("Each shelter image must be a valid URL"),
 
   body("description")
     .optional({ nullable: true })

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const animalController = require("../controllers/animal.controller");
-const animalValidation = require("../validation/animal.validate");
+const animalValidation = require("../Validation/animal.validate");
 
 const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
@@ -17,7 +17,7 @@ router.post(
   [
     auth,
     role(["shelterEmployee", "superadmin"]),
-    uploadArray("images", 10),
+    uploadArray("images", 8),
     animalValidation.createAnimalValidation,
   ],
   asyncHandler(animalController.createAnimal)
@@ -25,15 +25,30 @@ router.post(
 
 router.post(
   "/:id/images",
-  [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 10)],
+  [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 8)],
   asyncHandler(animalController.addAnimalImages),
 );
 
 router.delete(
-  "/:id/images/:publicId",
+  "/:id/images/:imageId",
   [auth, role(["shelterEmployee", "superadmin"])],
   asyncHandler(animalController.deleteAnimalImage),
 );
+
+// Delete all images
+router.delete(
+  "/:id/images",
+  [auth, role(["shelterEmployee", "superadmin"])],
+  asyncHandler(animalController.deleteAllAnimalImages),
+);
+
+// Set primary image
+router.patch(
+  "/:id/images/:imageId/primary",
+  [auth, role(["shelterEmployee", "superadmin"])],
+  asyncHandler(animalController.setPrimaryAnimalImage),
+);
+
 // Get all animals
 router.get(
   "/",

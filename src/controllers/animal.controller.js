@@ -84,135 +84,173 @@ createAnimal = async (req, res) => {
   const currentUserId = req.user._id;
 
   let shelterId;
-
-  if (req.user.role === "shelterEmployee") {
-    const employeeProfile = await this.getEmployeeProfile(currentUserId);
-
-    if (!employeeProfile) {
-      return res.status(403).json({
-        success: false,
-        message: "Shelter employee profile not found or inactive",
-      });
-    }
-
-    if (!employeeProfile.shelterId) {
-      return res.status(403).json({
-        success: false,
-        message: "Shelter employee is not assigned to a shelter",
-      });
-    }
-
-    shelterId = employeeProfile.shelterId;
-  }
-
-  if (req.user.role === "superadmin") {
-    shelterId = req.body.shelterId;
-
-    if (!shelterId) {
-      return res.status(400).json({
-        success: false,
-        message: "Shelter ID is required",
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(shelterId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid shelter ID",
-      });
-    }
-  }
-
-  const shelter = await Shelter.findById(shelterId);
-
-  if (!shelter) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter not found",
-    });
-  }
-
-  if (!this.isShelterAvailable(shelter)) {
-    return res.status(403).json({
-      success: false,
-      message: "Animals can only be added to approved and active shelters",
-    });
-  }
-
-  if (!req.files || req.files.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "At least one animal image is required",
-    });
-  }
-
-  const uploadedImages = [];
+  let uploadedImages = [];
 
   try {
+
+    if (req.user.role === "shelterEmployee") {
+      const employeeProfile = await this.getEmployeeProfile(currentUserId);
+
+      if (!employeeProfile) {
+        return res.status(403).json({
+          success: false,
+          message: "Shelter employee profile not found or inactive",
+        });
+      }
+
+      if (!employeeProfile.shelterId) {
+        return res.status(403).json({
+          success: false,
+          message: "Shelter employee is not assigned to a shelter",
+        });
+      }
+
+      shelterId = employeeProfile.shelterId;
+    }
+
+
+    if (req.user.role === "superadmin") {
+      shelterId = req.body.shelterId;
+
+      if (!shelterId) {
+        return res.status(400).json({
+          success: false,
+          message: "Shelter ID is required",
+        });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(shelterId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid shelter ID",
+        });
+      }
+    }
+
+
+    const shelter = await Shelter.findById(shelterId);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+
+    if (!this.isShelterAvailable(shelter)) {
+      return res.status(403).json({
+        success: false,
+        message: "Animals can only be added to approved and active shelters",
+      });
+    }
+
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one animal image is required",
+      });
+    }
+
+
     for (const file of req.files) {
+
       const uploaded = await uploadBufferToCloudinary({
         buffer: file.buffer,
         folder: "animal",
         originalName: file.originalname,
       });
 
-      uploadedImages.push({
-        url: uploaded.secure_url,
-        publicId: uploaded.public_id,
-      });
-    }
-  const {
-    name,
-    age,
-    ageUnit,
-    species,
-    breed,
-    gender,
-    size,
-    color,
-    healthStatus,
-    vaccinated,
-    description,
-    requirements,
-  } = req.body;
 
-  const animal = await Animal.create({
-    name,
-    age,
-    ageUnit,
-    species,
-    breed,
-    gender,
-    size,
-    color,
-    healthStatus,
-    vaccinated,
-    description,
-    requirements,
-    images: uploadedImages,
-    shelterId,
-    addedBy: currentUserId,
-    adoptionStatus: "available",
-    isActive: true,
-  });
+      uploadedImages.push(
+        this.buildUploadedImage(
+          uploaded,
+          uploadedImages.length === 0
+        )
+      );
+    }
+
+
+
+    const {
+      name,
+      age,
+      ageUnit,
+      species,
+      breed,
+      gender,
+      size,
+      color,
+      healthStatus,
+      vaccinated,
+      description,
+      requirements,
+    } = req.body;
+
+
+
+    const animal = await Animal.create({
+
+      name,
+      age,
+      ageUnit,
+      species,
+      breed,
+      gender,
+      size,
+      color,
+      healthStatus,
+      vaccinated,
+      description,
+      requirements,
+
+      images: uploadedImages,
+
+      shelterId,
+      addedBy: currentUserId,
+
+      adoptionStatus: "available",
+      isActive: true,
+
+    });
+
+
 
     const populatedAnimal = await Animal.findById(animal._id)
       .populate("shelterId", "name city")
       .populate("addedBy", "firstName lastName role");
 
-    // zain
-    const matchingService = require("../services/matching.service");
-    matchingService.runSmartMatchEngine(animal);
+
 
     return res.status(201).json({
+
       success: true,
+
       message: "Animal created successfully",
+
       data: populatedAnimal,
+
     });
-  } catch (error) {
-    await deleteImages(uploadedImages.map((image) => image.publicId));
+
+
+
+  } catch(error) {
+
+
+    if(uploadedImages.length > 0){
+
+      await deleteImages(
+        uploadedImages.map(image => image.publicId)
+      );
+
+    }
+
+
     throw error;
+
   }
+
 };
 
   // ==================================================
@@ -448,7 +486,7 @@ createAnimal = async (req, res) => {
       "healthStatus",
       "vaccinated",
       "description",
-      "images",
+      // "images",
     ];
 
     allowedFields.forEach((field) => {
@@ -673,91 +711,391 @@ createAnimal = async (req, res) => {
       data: populatedAnimal,
     });
   };
-    buildUploadedImage = (result) => ({
+  buildUploadedImage = (result, isPrimary = false) => ({
     url: result.secure_url,
     publicId: result.public_id,
+    isPrimary,
   });
 
-  addAnimalImages = async (req, res) => {
-    const { id } = req.params;
+ addAnimalImages = async (req, res) => {
+
+  const { id } = req.params;
+
+  const uploadedImages = [];
+
+
+  try {
+
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
-        success: false,
-        message: "Invalid animal ID",
+        success:false,
+        message:"Invalid animal ID",
       });
     }
 
-    const animal = await Animal.findById(id);
-
-    if (!animal) {
-      return res.status(404).json({ success: false, message: "Animal not found" });
-    }
-
-    const allowed = await this.canManageAnimal(req.user, animal);
-    if (!allowed) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this animal" });
-    }
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: "At least one image is required" });
-    }
-
-    const uploadedImages = [];
-    try {
-      for (const file of req.files) {
-        const uploaded = await uploadBufferToCloudinary({ buffer: file.buffer, folder: "animal", originalName: file.originalname });
-        uploadedImages.push(this.buildUploadedImage(uploaded));
-      }
-
-      animal.images.push(...uploadedImages);
-      await animal.save();
-
-      const populatedAnimal = await Animal.findById(animal._id)
-        .populate("shelterId", "name city address")
-        .populate("addedBy", "firstName lastName email role");
-
-      return res.status(200).json({ success: true, message: "Animal images added successfully", data: populatedAnimal });
-    } catch (error) {
-      await deleteImages(uploadedImages.map((image) => image.publicId));
-      throw error;
-    }
-  };
-
-  deleteAnimalImage = async (req, res) => {
-    const { id, publicId } = req.params;
-console.log(req.params);
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ success: false, message: "Invalid animal ID" });
-    }
 
     const animal = await Animal.findById(id);
 
-    if (!animal) {
-      return res.status(404).json({ success: false, message: "Animal not found" });
+
+    if(!animal){
+      return res.status(404).json({
+        success:false,
+        message:"Animal not found",
+      });
     }
 
-    const allowed = await this.canManageAnimal(req.user, animal);
-    if (!allowed) {
-      return res.status(403).json({ success: false, message: "You are not allowed to update this animal" });
+
+
+    const allowed = await this.canManageAnimal(
+      req.user,
+      animal
+    );
+
+
+    if(!allowed){
+
+      return res.status(403).json({
+        success:false,
+        message:"You are not allowed to update this animal",
+      });
+
     }
 
-    const imageIndex = animal.images.findIndex((img) => String(img.publicId) === String(publicId));
 
-    if (imageIndex === -1) {
-      return res.status(404).json({ success: false, message: "Image not found" });
+
+    if(!req.files || req.files.length === 0){
+
+      return res.status(400).json({
+        success:false,
+        message:"At least one image is required",
+      });
+
     }
 
-    await deleteImage(publicId);
-    animal.images.splice(imageIndex, 1);
+
+
+    for(const file of req.files){
+
+
+      const uploaded = await uploadBufferToCloudinary({
+
+        buffer:file.buffer,
+
+        folder:"animal",
+
+        originalName:file.originalname,
+
+      });
+
+
+
+      const isPrimary =
+        animal.images.length === 0 &&
+        uploadedImages.length === 0;
+
+
+
+      uploadedImages.push(
+
+        this.buildUploadedImage(
+          uploaded,
+          isPrimary
+        )
+
+      );
+
+    }
+
+
+
+
+    animal.images.push(...uploadedImages);
+
+
     await animal.save();
+
+
+
+
+    return res.status(200).json({
+
+      success:true,
+
+      message:"Animal images added successfully",
+
+      data:animal,
+
+    });
+
+
+
+  }catch(error){
+
+
+
+    if(uploadedImages.length > 0){
+
+      await deleteImages(
+        uploadedImages.map(image=>image.publicId)
+      );
+
+    }
+
+
+    throw error;
+
+
+  }
+
+};
+deleteAnimalImage = async (req,res)=>{
+
+const {id,imageId}=req.params;
+
+
+try{
+
+
+const animal=await Animal.findById(id);
+
+
+if(!animal){
+
+return res.status(404).json({
+
+success:false,
+
+message:"Animal not found"
+
+});
+
+}
+
+
+
+const allowed=await this.canManageAnimal(
+req.user,
+animal
+);
+
+
+if(!allowed){
+
+return res.status(403).json({
+
+success:false,
+
+message:"You are not allowed to update this animal"
+
+});
+
+}
+
+
+
+const imageIndex=animal.images.findIndex(
+img=>String(img._id)===String(imageId)
+);
+
+
+
+if(imageIndex===-1){
+
+return res.status(404).json({
+
+success:false,
+
+message:"Image not found"
+
+});
+
+}
+
+
+
+const image=animal.images[imageIndex];
+
+
+
+animal.images.splice(imageIndex,1);
+
+
+
+if(image.isPrimary && animal.images.length>0){
+
+animal.images[0].isPrimary=true;
+
+}
+
+
+
+await animal.save();
+
+
+
+try{
+
+await deleteImage(image.publicId);
+
+}catch(cloudinaryError){
+
+console.log(
+"Cloudinary delete failed:",
+cloudinaryError.message
+);
+
+}
+
+
+
+
+return res.status(200).json({
+
+success:true,
+
+message:"Animal image deleted successfully",
+
+data:animal
+
+});
+
+
+
+}catch(error){
+
+throw error;
+
+}
+
+
+};
+setPrimaryAnimalImage = async (req, res) => {
+  const { id, imageId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid animal ID",
+    });
+  }
+  if (!mongoose.Types.ObjectId.isValid(imageId)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid image ID",
+  });
+  }
+
+  const animal = await Animal.findById(id);
+
+  if (!animal) {
+    return res.status(404).json({ success: false, message: "Animal not found" });
+  }
+
+  const allowed = await this.canManageAnimal(req.user, animal);
+  if (!allowed) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not allowed to update this animal",
+    });
+  }
+
+  const targetImage = animal.images.find(
+    (img) => String(img._id) === String(imageId),
+  );
+
+  if (!targetImage) {
+    return res.status(404).json({
+      success: false,
+      message: "Image not found",
+    });
+  }
+
+  animal.images.forEach((img) => {
+    img.isPrimary = String(img._id) === String(imageId);
+  });
+
+  await animal.save();
+
+  const populatedAnimal = await Animal.findById(animal._id)
+    .populate("shelterId", "name city address")
+    .populate("addedBy", "firstName lastName email role");
+
+  return res.status(200).json({
+    success: true,
+    message: "Primary animal image updated successfully",
+    data: populatedAnimal,
+  });
+};
+
+deleteAllAnimalImages = async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid animal ID",
+    });
+  }
+
+  const animal = await Animal.findById(id);
+
+  if (!animal) {
+    return res.status(404).json({
+      success: false,
+      message: "Animal not found",
+    });
+  }
+
+  const allowed = await this.canManageAnimal(req.user, animal);
+
+  if (!allowed) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not allowed to update this animal",
+    });
+  }
+
+  if (!animal.images || animal.images.length === 0) {
+    return res.status(404).json({
+      success: false,
+      message: "No animal images found",
+    });
+  }
+
+  const imageIds = animal.images.map(
+    (image) => image.publicId
+  );
+
+  try {
+
+    animal.images = [];
+
+    await animal.save();
+
+    try {
+      await deleteImages(imageIds);
+    } catch (cloudinaryError) {
+      console.log(
+        "Cloudinary delete failed:",
+        cloudinaryError.message
+      );
+    }
 
     const populatedAnimal = await Animal.findById(animal._id)
       .populate("shelterId", "name city address")
-      .populate("addedBy", "firstName lastName email role");
+      .populate("addedBy", "name email role");
 
-    return res.status(200).json({ success: true, message: "Animal image deleted successfully", data: populatedAnimal });
-  };
+    return res.status(200).json({
+      success: true,
+      message: "All animal images deleted successfully",
+      data: populatedAnimal,
+    });
+
+  } catch (error) {
+    throw error;
+  }
+};
 }
 
 module.exports = new AnimalsController();

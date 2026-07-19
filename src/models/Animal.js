@@ -88,16 +88,17 @@ const animalSchema = new mongoose.Schema(
       maxlength: [1000, "Description must not exceed 1000 characters"],
       default: null,
     },
+  
   images: {
     type: [imageSchema],
-    validate: {
-      validator(images) {
-          return Array.isArray(images) && images.length > 0;
-        },
-        message: "At least one animal image is required",
-      },
-    },
-
+    default: [],
+    // validate: {
+    //     validator(images) {
+    //         return Array.isArray(images) && images.length > 0;
+    //       },
+    //       message: "At least one animal image is required",
+    // },
+  },
     adoptionStatus: {
       type: String,
       enum: {
