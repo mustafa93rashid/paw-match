@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+
 const Animal = require("../models/Animal");
 const Shelter = require("../models/Shelter");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
@@ -8,7 +9,13 @@ const { runSmartMatchEngine } = require("../services/matching.service");
 const matchingService = require("../services/matching.service");
 
 class AnimalsController {
+  // ==================================================
   // Get current shelter employee profile
+  // ==================================================
+  // • Finds the active Shelter Employee profile.
+  // • Used to determine the shelter assigned to the employee.
+  // • Returns null if the employee has no active profile.
+  // ==================================================
   getEmployeeProfile = async (userId) => {
     const employeeProfile = await ShelterEmployeeProfile.findOne({
       userId,
@@ -18,7 +25,14 @@ class AnimalsController {
     return employeeProfile;
   };
 
-  // Check if the user can manage the animal
+  // ==================================================
+  // Check if the current user can manage an animal
+  // ==================================================
+  // • Super Admin can manage animals from any shelter.
+  // • Shelter Employees can manage animals belonging
+  //   to their assigned shelter only.
+  // • Other roles are not allowed to manage animals.
+  // ==================================================
   canManageAnimal = async (user, animal) => {
     if (user.role === "superadmin") {
       return true;
@@ -28,8 +42,7 @@ class AnimalsController {
       return false;
     }
 
-    const currentUserId = user._id;
-    const employeeProfile = await this.getEmployeeProfile(currentUserId);
+    const employeeProfile = await this.getEmployeeProfile(user._id);
 
     if (!employeeProfile || !employeeProfile.shelterId) {
       return false;
@@ -38,9 +51,38 @@ class AnimalsController {
     return String(animal.shelterId) === String(employeeProfile.shelterId);
   };
 
+  // ==================================================
+  // Check if a shelter is approved and active
+  // ==================================================
+  // • Checks that the shelter exists.
+  // • Checks that the shelter is verified and approved.
+  // • Checks that the shelter is currently active.
+  // • Used when creating, transferring, or restoring animals.
+  // ==================================================
+  isShelterAvailable = (shelter) => {
+    return (
+      shelter &&
+      shelter.verificationStatus === "approved" &&
+      shelter.isVerified === true &&
+      shelter.isActive === true
+    );
+  };
+
+  // ==================================================
   // Create a new animal
+  // ==================================================
+  // • Allows Shelter Employees and Super Admin only.
+  // • Shelter Employees can add animals to their shelter only.
+  // • Super Admin must provide a valid Shelter ID.
+  // • The shelter must be verified, approved, and active.
+  // • Accepts only explicitly allowed animal fields.
+  // • Prevents the client from controlling isActive,
+  //   adoptionStatus, shelterId, and addedBy.
+  // • Animals are created as active and available.
+  // ==================================================
   createAnimal = async (req, res) => {
     const currentUserId = req.user._id;
+
     let shelterId;
 
     if (req.user.role === "shelterEmployee") {
@@ -49,7 +91,7 @@ class AnimalsController {
       if (!employeeProfile) {
         return res.status(403).json({
           success: false,
-          message: "Shelter employee profile not found",
+          message: "Shelter employee profile not found or inactive",
         });
       }
 
@@ -72,6 +114,13 @@ class AnimalsController {
           message: "Shelter ID is required",
         });
       }
+
+      if (!mongoose.Types.ObjectId.isValid(shelterId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid shelter ID",
+        });
+      }
     }
 
     const shelter = await Shelter.findById(shelterId);
@@ -83,21 +132,47 @@ class AnimalsController {
       });
     }
 
-    if (
-      shelter.verificationStatus !== "approved" ||
-      !shelter.isVerified ||
-      !shelter.isActive
-    ) {
+    if (!this.isShelterAvailable(shelter)) {
       return res.status(403).json({
         success: false,
         message: "Animals can only be added to approved and active shelters",
       });
     }
 
+    const {
+      name,
+      age,
+      ageUnit,
+      species,
+      breed,
+      gender,
+      size,
+      color,
+      healthStatus,
+      vaccinated,
+      description,
+      images,
+      requirements,
+    } = req.body;
+
     const animal = await Animal.create({
-      ...req.body,
+      name,
+      age,
+      ageUnit,
+      species,
+      breed,
+      gender,
+      size,
+      color,
+      healthStatus,
+      vaccinated,
+      description,
+      images,
+      requirements,
       shelterId,
       addedBy: currentUserId,
+      adoptionStatus: "available",
+      isActive: true,
     });
 
     const populatedAnimal = await Animal.findById(animal._id)
@@ -115,7 +190,15 @@ class AnimalsController {
     });
   };
 
+  // ==================================================
   // Get all animals
+  // ==================================================
+  // • Returns animals based on the provided filters.
+  // • Supports searching by name, breed, and description.
+  // • Validates Boolean query values before using them.
+  // • Returns active animals by default.
+  // • Only Super Admin can request inactive animals.
+  // ==================================================
   getAll = async (req, res) => {
     const {
       species,
@@ -128,7 +211,6 @@ class AnimalsController {
       vaccinated,
       isActive,
       search,
-      sort = "-createdAt",
     } = req.query;
 
     const filter = {};
@@ -172,10 +254,26 @@ class AnimalsController {
     }
 
     if (vaccinated !== undefined) {
+      if (!["true", "false"].includes(vaccinated)) {
+        return res.status(400).json({
+          success: false,
+          message: "Vaccinated must be true or false",
+        });
+      }
+
       filter.vaccinated = vaccinated === "true";
     }
 
     if (isActive !== undefined) {
+      if (!["true", "false"].includes(isActive)) {
+        return res.status(400).json({
+          success: false,
+          message: "isActive must be true or false",
+        });
+      }
+    }
+
+    if (req.user.role === "superadmin" && isActive !== undefined) {
       filter.isActive = isActive === "true";
     } else {
       filter.isActive = true;
@@ -206,7 +304,7 @@ class AnimalsController {
 
     const animals = await Animal.find(filter)
       .populate("shelterId", "name city address")
-      .populate("addedBy", "firstName lastName email role")
+      .populate("addedBy", "firstName lastName role");
 
     return res.status(200).json({
       success: true,
@@ -215,7 +313,15 @@ class AnimalsController {
     });
   };
 
+  // ==================================================
   // Get animal by ID
+  // ==================================================
+  // • Validates the Animal ID.
+  // • Returns active animals only.
+  // • Returns basic shelter information.
+  // • Does not expose the email of the employee
+  //   who added the animal.
+  // ==================================================
   getOne = async (req, res) => {
     const { id } = req.params;
 
@@ -231,7 +337,7 @@ class AnimalsController {
       isActive: true,
     })
       .populate("shelterId", "name city address phone")
-      .populate("addedBy", "firstName lastName email role");
+      .populate("addedBy", "firstName lastName role");
 
     if (!animal) {
       return res.status(404).json({
@@ -247,7 +353,20 @@ class AnimalsController {
     });
   };
 
+  // ==================================================
   // Update animal
+  // ==================================================
+  // • Allows Super Admin to update any animal.
+  // • Shelter Employees can update animals belonging
+  //   to their assigned shelter only.
+  // • Updates only explicitly allowed animal fields.
+  // • Prevents changing isActive through this endpoint.
+  // • Prevents changing adoptionStatus through this endpoint.
+  // • Adoption status must be controlled through
+  //   the Adoption Request workflow.
+  // • Super Admin can transfer an animal to another
+  //   approved and active shelter.
+  // ==================================================
   updateAnimal = async (req, res) => {
     const { id } = req.params;
 
@@ -276,6 +395,22 @@ class AnimalsController {
       });
     }
 
+    if (req.body.isActive !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Animal active status must be changed through delete or restore endpoints",
+      });
+    }
+
+    if (req.body.adoptionStatus !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Animal adoption status must be changed through the adoption request process",
+      });
+    }
+
     const allowedFields = [
       "name",
       "age",
@@ -289,8 +424,6 @@ class AnimalsController {
       "vaccinated",
       "description",
       "images",
-      "adoptionStatus",
-      "isActive",
     ];
 
     allowedFields.forEach((field) => {
@@ -307,22 +440,37 @@ class AnimalsController {
         });
       }
 
-      const shelterExists = await Shelter.exists({
-        _id: req.body.shelterId,
-        isActive: true,
-      });
+      const newShelter = await Shelter.findById(req.body.shelterId);
 
-      if (!shelterExists) {
+      if (!newShelter) {
         return res.status(404).json({
           success: false,
-          message: "Shelter not found or inactive",
+          message: "Shelter not found",
         });
       }
 
-      animal.shelterId = req.body.shelterId;
+      if (!this.isShelterAvailable(newShelter)) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Animal can only be transferred to an approved and active shelter",
+        });
+      }
+
+      animal.shelterId = newShelter._id;
     }
 
-    if (req.body.requirements) {
+    if (
+      req.user.role !== "superadmin" &&
+      req.body.shelterId !== undefined
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Only Super Admin can change the animal shelter",
+      });
+    }
+
+    if (req.body.requirements !== undefined) {
       const requirements = req.body.requirements;
 
       const requirementFields = [
@@ -346,7 +494,7 @@ class AnimalsController {
 
     const populatedAnimal = await Animal.findById(animal._id)
       .populate("shelterId", "name city address")
-      .populate("addedBy", "firstName lastName email role");
+      .populate("addedBy", "firstName lastName role");
 
     return res.status(200).json({
       success: true,
@@ -355,9 +503,30 @@ class AnimalsController {
     });
   };
 
+  // ==================================================
   // Soft delete animal
+  // ==================================================
+  // • Validates the Animal ID before querying.
+  // • Allows Super Admin to delete any animal.
+  // • Shelter Employees can delete animals belonging
+  //   to their assigned shelter only.
+  // • Prevents deleting an already inactive animal.
+  // • Prevents deleting an adopted animal.
+  // • Changes isActive to false only.
+  // • Keeps the current adoptionStatus so it can be
+  //   preserved if the animal is restored later.
+  // ==================================================
   removeAnimal = async (req, res) => {
-    const animal = await Animal.findById(req.params.id);
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid animal ID",
+      });
+    }
+
+    const animal = await Animal.findById(id);
 
     if (!animal) {
       return res.status(404).json({
@@ -382,8 +551,14 @@ class AnimalsController {
       });
     }
 
+    if (animal.adoptionStatus === "adopted") {
+      return res.status(400).json({
+        success: false,
+        message: "Adopted animals cannot be deleted",
+      });
+    }
+
     animal.isActive = false;
-    animal.adoptionStatus = "unavailable";
 
     await animal.save();
 
@@ -394,7 +569,19 @@ class AnimalsController {
     });
   };
 
+  // ==================================================
   // Restore deleted animal
+  // ==================================================
+  // • Validates the Animal ID before querying.
+  // • Allows Super Admin to restore any animal.
+  // • Shelter Employees can restore animals belonging
+  //   to their assigned shelter only.
+  // • Prevents restoring an already active animal.
+  // • The related shelter must still be verified,
+  //   approved, and active.
+  // • Changes isActive to true only.
+  // • Preserves the animal's previous adoptionStatus.
+  // ==================================================
   restoreAnimal = async (req, res) => {
     const { id } = req.params;
 
@@ -430,15 +617,35 @@ class AnimalsController {
       });
     }
 
+    const shelter = await Shelter.findById(animal.shelterId);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Animal shelter not found",
+      });
+    }
+
+    if (!this.isShelterAvailable(shelter)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Animal cannot be restored because the shelter is not approved and active",
+      });
+    }
+
     animal.isActive = true;
-    animal.adoptionStatus = "available";
 
     await animal.save();
+
+    const populatedAnimal = await Animal.findById(animal._id)
+      .populate("shelterId", "name city address")
+      .populate("addedBy", "firstName lastName role");
 
     return res.status(200).json({
       success: true,
       message: "Animal restored successfully",
-      data: animal,
+      data: populatedAnimal,
     });
   };
 }
