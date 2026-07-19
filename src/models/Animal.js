@@ -1,7 +1,9 @@
-// models/Animal.js
-
 const mongoose = require("mongoose");
 const imageSchema = require("../models/image_schema");
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
 const animalSchema = new mongoose.Schema(
   {
     name: {

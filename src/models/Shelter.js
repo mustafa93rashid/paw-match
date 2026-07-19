@@ -25,6 +25,8 @@ const shelterSchema = new mongoose.Schema(
       trim: true,
     },
 
+
+
     logo: {
       type: imageSchema,
       default: null,

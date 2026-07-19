@@ -1,3 +1,4 @@
+
 const { Readable } = require("stream");
 const cloudinary = require("../config/cloudinary");
 
@@ -48,7 +49,11 @@ const uploadBufferToCloudinary = ({
   }
 
   const finalPublicId = publicId || buildPublicId(folder, originalName);
-
+// upload_stream() doesn't upload the image by itself.
+//  It simply creates a writable stream (an upload channel) and opens a connection to Cloudinary,
+//  waiting for data to be sent.
+//  The actual image upload starts only when the image buffer is piped into that stream using
+  
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
@@ -59,6 +64,7 @@ const uploadBufferToCloudinary = ({
           { width: 800, height: 800, crop: "limit" },
           { quality: "auto" },
           { fetch_format: "auto" },
+
         ],
       },
       (error, result) => {
@@ -70,16 +76,21 @@ const uploadBufferToCloudinary = ({
       },
     );
 
-    Readable.from(buffer).on("error", reject).pipe(uploadStream);
+//  The actual image upload starts only when the image buffer is piped into that stream using
+
+    Readable.from(buffer).on('error', reject).pipe(uploadStream);
+
   });
 };
 
 const deleteImage = async (publicId) => {
   if (!publicId) {
+
     throw new Error("publicId is required");
   }
 
   return cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+
 };
 
 const deleteImages = async (publicIds = []) => {

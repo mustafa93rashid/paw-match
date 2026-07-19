@@ -54,4 +54,13 @@ router.delete(
 // Get user by ID (Super Admin)
 router.get("/:id", [auth, role(["superadmin"])], asyncHandler(userController.getOne));
 
+// Upload, replace, and delete profile image
+router.patch("/profile/image",[auth, uploadSingle("image")],asyncHandler(userController.uploadProfileImage));
+
+// Replace profile image
+router.patch("/profile/image/replace",[auth, uploadSingle("image")],asyncHandler(userController.replaceProfileImage));
+
+// Delete profile image
+router.delete("/profile/image",[auth],asyncHandler(userController.deleteProfileImage));
+
 module.exports = router;

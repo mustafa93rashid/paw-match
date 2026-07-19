@@ -6,7 +6,9 @@ const fileFilter = (req, file, cb) => {
     return cb(null, true);
   }
 
+
   return cb(new Error('Only JPEG, PNG, and WebP images are allowed'), false);
+
 };
 
 const upload = multer({
