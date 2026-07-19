@@ -2,23 +2,191 @@ const User = require("../models/User");
 const AdopterProfile = require("../models/AdopterProfile");
 const VetProfile = require("../models/VetProfile");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
+
 const passwordService = require("../utils/passwordService");
-class UsersController {
+
+const {uploadBufferToCloudinary,deleteImage} = require("../services/cloudinary.service");
+
+// ==================================================
+// Allowed user roles
+// ==================================================
+const ALLOWED_USER_ROLES = ["adopter", "shelterEmployee", "vet"];
+
+// ==================================================
+// User profile editable fields
+// ==================================================
+const ALLOWED_PROFILE_FIELDS = [
+  "firstName",
+  "lastName",
+  "dateOfBirth",
+  "gender",
+  "phone",
+  "address",
+];
+
+// ==================================================
+// Delete role profile
+// ==================================================
+const deleteRoleProfile = async (userId, role) => {
+  if (role === "adopter") {
+    await AdopterProfile.findOneAndDelete({
+      userId,
+    });
+
+    return;
+  }
+
+  if (role === "vet") {
+    await VetProfile.findOneAndDelete({
+      userId,
+    });
+
+    return;
+  }
+
+  if (role === "shelterEmployee") {
+    await ShelterEmployeeProfile.findOneAndDelete({
+      userId,
+    });
+  }
+};
+
+// ==================================================
+// Create role profile
+// ==================================================
+const createRoleProfile = async ({ userId, role, isActive }) => {
+  const profileData = {
+    userId,
+    isActive,
+  };
+
+  if (role === "adopter") {
+    return AdopterProfile.create(profileData);
+  }
+
+  if (role === "vet") {
+    return VetProfile.create(profileData);
+  }
+
+  if (role === "shelterEmployee") {
+    return ShelterEmployeeProfile.create(profileData);
+  }
+
+  return null;
+};
+
+// ==================================================
+// Update role profile status
+// ==================================================
+const updateRoleProfileStatus = async ({ userId, role, isActive }) => {
+  const update = {
+    $set: {
+      isActive,
+    },
+  };
+
+  const options = {
+    runValidators: true,
+  };
+
+  if (role === "adopter") {
+    return AdopterProfile.findOneAndUpdate(
+      {
+        userId,
+      },
+      update,
+      options,
+    );
+  }
+
+  if (role === "vet") {
+    return VetProfile.findOneAndUpdate(
+      {
+        userId,
+      },
+      update,
+      options,
+    );
+  }
+
+  if (role === "shelterEmployee") {
+    return ShelterEmployeeProfile.findOneAndUpdate(
+      {
+        userId,
+      },
+      update,
+      options,
+    );
+  }
+
+  return null;
+};
+
+// ==================================================
+// Remove sensitive user fields
+// ==================================================
+const sanitizeUser = (user) => {
+  if (!user) {
+    return null;
+  }
+
+  const userData =
+    typeof user.toObject === "function" ? user.toObject() : { ...user };
+
+  delete userData.password;
+  delete userData.passwordResetToken;
+  delete userData.passwordResetExpires;
+  delete userData.emailVerificationCode;
+  delete userData.emailVerificationExpires;
+  delete userData.refreshToken;
+
+  return userData;
+};
+
+class UserController {
+  // ==================================================
+  // Build uploaded image
+  // ==================================================
+  buildUploadedImage = (uploadResult) => ({
+    url: uploadResult.secure_url,
+    publicId: uploadResult.public_id,
+  });
+
+  // ==================================================
+  // Get current user ID
+  // ==================================================
+  getCurrentUserId = (req) => {
+    return req.user?._id || req.user?.id;
+  };
+
   // ==================================================
   // Get all users
   // ==================================================
   getAll = async (req, res) => {
-    // ==================================================
-    // • Retrieves all registered users from the database.
-    // • Password hashes are excluded from the response.
-    // • Access is restricted to Super Admin only.
+    // • Retrieves all registered users.
+    // • Excludes sensitive user information.
+    // • Access should be restricted to Super Admin
+    //   through the route middleware.
     // ==================================================
 
-    // Retrieve all users without exposing password hashes
-    const users = await User.find({}).select("-password");
+    const users = await User.find({})
+      .select(
+        [
+          "-password",
+          "-passwordResetToken",
+          "-passwordResetExpires",
+          "-emailVerificationCode",
+          "-emailVerificationExpires",
+          "-refreshToken",
+        ].join(" "),
+      )
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json({
       success: true,
+      count: users.length,
       data: users,
     });
   };
@@ -27,19 +195,22 @@ class UsersController {
   // Get user by ID
   // ==================================================
   getOne = async (req, res) => {
-    // ==================================================
-    // • Retrieves a specific user by their unique ID.
-    // • Password hash is excluded from the response.
-    // • Returns 404 if the requested user does not exist.
-    // • Access is restricted to Super Admin only.
+    // • Retrieves a specific user by ID.
+    // • Excludes sensitive information.
+    // • Returns 404 when the user does not exist.
     // ==================================================
 
-    const id = req.params.id;
+    const user = await User.findById(req.params.id).select(
+      [
+        "-password",
+        "-passwordResetToken",
+        "-passwordResetExpires",
+        "-emailVerificationCode",
+        "-emailVerificationExpires",
+        "-refreshToken",
+      ].join(" "),
+    );
 
-    // Find the user without exposing the password hash
-    const user = await User.findById(id).select("-password");
-
-    // Return an error if the user does not exist
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -57,29 +228,33 @@ class UsersController {
   // Update user role
   // ==================================================
   updateRole = async (req, res) => {
-    // ==================================================
     // • Updates the role of an existing user.
     // • Prevents changing the Super Admin role.
-    // • Deletes the previous role profile before switching.
-    // • Creates a new profile based on the selected role.
-    // • Returns the updated role after a successful change.
-    // • Access is restricted to Super Admin only.
+    // • Prevents assigning an unsupported role.
+    // • Deletes the old role profile.
+    // • Creates the profile related to the new role.
+    // • Restores the old profile if creating the
+    //   new profile fails.
     // ==================================================
-
-    // Find the target user
-    const user = await User.findById(req.params.id);
-
-    // Return an error if the user does not exist
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User Not Found",
-      });
-    }
 
     const { role } = req.body;
 
-    // Prevent changing the Super Admin role
+    if (!ALLOWED_USER_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Role must be adopter, shelterEmployee, or vet",
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
     if (user.role === "superadmin") {
       return res.status(403).json({
         success: false,
@@ -87,7 +262,6 @@ class UsersController {
       });
     }
 
-    // Prevent assigning the same role again
     if (user.role === role) {
       return res.status(400).json({
         success: false,
@@ -95,51 +269,40 @@ class UsersController {
       });
     }
 
-    // Remove the previous role profile
-    if (user.role === "adopter") {
-      await AdopterProfile.findOneAndDelete({
-        userId: user._id,
-      });
-    }
+    const previousRole = user.role;
 
-    if (user.role === "vet") {
-      await VetProfile.findOneAndDelete({
-        userId: user._id,
-      });
-    }
+    await deleteRoleProfile(user._id, previousRole);
 
-    if (user.role === "shelterEmployee") {
-      await ShelterEmployeeProfile.findOneAndDelete({
+    try {
+      await createRoleProfile({
         userId: user._id,
-      });
-    }
-
-    // Create a new profile for the selected role
-    if (role === "adopter") {
-      await AdopterProfile.create({
-        userId: user._id,
+        role,
         isActive: user.isActive,
       });
+
+      user.role = role;
+
+      await user.save();
+    } catch (error) {
+      // Remove the partially created new profile.
+      await deleteRoleProfile(user._id, role);
+
+      // Restore the previous role profile.
+      try {
+        await createRoleProfile({
+          userId: user._id,
+          role: previousRole,
+          isActive: user.isActive,
+        });
+      } catch (restoreError) {
+        console.error(
+          "Failed to restore previous role profile:",
+          restoreError.message,
+        );
+      }
+
+      throw error;
     }
-
-    if (role === "vet") {
-      await VetProfile.create({
-        userId: user._id,
-        isActive: user.isActive,
-      });
-    }
-
-    if (role === "shelterEmployee") {
-      await ShelterEmployeeProfile.create({
-        userId: user._id,
-        isActive: user.isActive,
-      });
-    }
-
-    // Update the user's role
-    user.role = role;
-
-    await user.save();
 
     return res.status(200).json({
       success: true,
@@ -155,21 +318,25 @@ class UsersController {
   // Update user account status
   // ==================================================
   updateStatus = async (req, res) => {
-    // ==================================================
-    // • Activates or deactivates an existing user account.
-    // • Validates that isActive is provided as a Boolean value.
-    // • Prevents the Super Admin from changing their own account status.
-    // • Prevents deactivating another Super Admin account.
-    // • Synchronizes the account status with the related role profile.
-    // • Access is restricted to Super Admin only.
+    // • Activates or deactivates a user account.
+    // • Requires isActive to be a Boolean.
+    // • Prevents the Super Admin from changing
+    //   their own account status.
+    // • Prevents deactivating another Super Admin.
+    // • Synchronizes the status with the role profile.
     // ==================================================
 
     const { isActive } = req.body;
 
-    // Find the target user
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "isActive must be a Boolean value",
+      });
+    }
+
     const user = await User.findById(req.params.id);
 
-    // Return an error if the user does not exist
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -177,15 +344,15 @@ class UsersController {
       });
     }
 
-    // Prevent the Super Admin from changing their own account status
-    if (String(req.user.id) === String(user._id)) {
+    const currentUserId = this.getCurrentUserId(req);
+
+    if (String(currentUserId) === String(user._id)) {
       return res.status(400).json({
         success: false,
         message: "You cannot change your own account status",
       });
     }
 
-    // Prevent deactivating a Super Admin account
     if (user.role === "superadmin" && isActive === false) {
       return res.status(403).json({
         success: false,
@@ -193,60 +360,32 @@ class UsersController {
       });
     }
 
-    // Update the user account status
+    if (user.isActive === isActive) {
+      return res.status(400).json({
+        success: false,
+        message: `User is already ${isActive ? "active" : "inactive"}`,
+      });
+    }
+
+    const previousStatus = user.isActive;
+
     user.isActive = isActive;
 
     await user.save();
 
-    // Synchronize the status with the adopter profile
-    if (user.role === "adopter") {
-      await AdopterProfile.findOneAndUpdate(
-        {
-          userId: user._id,
-        },
-        {
-          $set: {
-            isActive,
-          },
-        },
-        {
-          runValidators: true,
-        },
-      );
-    }
+    try {
+      await updateRoleProfileStatus({
+        userId: user._id,
+        role: user.role,
+        isActive,
+      });
+    } catch (error) {
+      // Restore the user status if profile synchronization fails.
+      user.isActive = previousStatus;
 
-    // Synchronize the status with the vet profile
-    if (user.role === "vet") {
-      await VetProfile.findOneAndUpdate(
-        {
-          userId: user._id,
-        },
-        {
-          $set: {
-            isActive,
-          },
-        },
-        {
-          runValidators: true,
-        },
-      );
-    }
+      await user.save();
 
-    // Synchronize the status with the shelter employee profile
-    if (user.role === "shelterEmployee") {
-      await ShelterEmployeeProfile.findOneAndUpdate(
-        {
-          userId: user._id,
-        },
-        {
-          $set: {
-            isActive,
-          },
-        },
-        {
-          runValidators: true,
-        },
-      );
+      throw error;
     }
 
     return res.status(200).json({
@@ -264,24 +403,37 @@ class UsersController {
   // Get current user profile
   // ==================================================
   profile = async (req, res) => {
-    // ==================================================
-    // • Retrieves the authenticated user's profile.
-    // • Requires a valid authenticated user.
-    // • Password hash is excluded from the response.
+    // • Retrieves the authenticated user's account.
+    // • Excludes all sensitive information.
     // ==================================================
 
-    // Ensure the request is authenticated
-    if (!req.user) {
+    const currentUserId = this.getCurrentUserId(req);
+
+    if (!currentUserId) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized",
       });
     }
 
-    // Retrieve the authenticated user's profile
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(currentUserId).select(
+      [
+        "-password",
+        "-passwordResetToken",
+        "-passwordResetExpires",
+        "-emailVerificationCode",
+        "-emailVerificationExpires",
+        "-refreshToken",
+      ].join(" "),
+    );
 
-    // Return the user profile
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: "Profile retrieved successfully",
@@ -293,17 +445,18 @@ class UsersController {
   // Update current user profile
   // ==================================================
   updateProfile = async (req, res) => {
-    // ==================================================
-    // • Updates the authenticated user's personal information.
-    // • Only predefined profile fields are allowed to be updated.
-    // • Returns an error if no valid fields are provided.
-    // • Password and other sensitive fields are excluded from the response.
+    // • Updates the authenticated user's personal data.
+    // • Accepts predefined editable fields only.
+    // • Prevents changing email, role, password,
+    //   status, and profile image through this endpoint.
+    // • Profile image must be managed through
+    //   dedicated image endpoints.
     // ==================================================
 
-    // Find the authenticated user
-    const user = await User.findById(req.user.id);
+    const currentUserId = this.getCurrentUserId(req);
 
-    // Return an error if the user does not exist
+    const user = await User.findById(currentUserId);
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -311,90 +464,323 @@ class UsersController {
       });
     }
 
-    // Update the user's profile information
+    const protectedFields = [
+      "email",
+      "password",
+      "role",
+      "isActive",
+      "isEmailVerified",
+      "profileImage",
+      "passwordResetToken",
+      "passwordResetExpires",
+      "emailVerificationCode",
+      "emailVerificationExpires",
+    ];
+
+    const hasProtectedField = protectedFields.some(
+      (field) => req.body[field] !== undefined,
+    );
+
+    if (hasProtectedField) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Protected user fields cannot be updated through this endpoint",
+      });
+    }
+
+    const updateData = {};
+
+    ALLOWED_PROFILE_FIELDS.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    });
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid profile fields were provided",
+      });
+    }
+
     Object.assign(user, updateData);
 
     await user.save();
 
-    // Remove sensitive fields before sending the response
-    const userData = user.toObject();
-
-    delete userData.password;
-    delete userData.passwordResetToken;
-    delete userData.passwordResetExpires;
-
     return res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      data: userData,
+      data: sanitizeUser(user),
     });
   };
 
   // ==================================================
-  // Create user account by admin
+  // Upload profile image
+  // ==================================================
+  uploadProfileImage = async (req, res) => {
+    // • Uploads the user's first profile image.
+    // • Prevents uploading another image when one
+    //   already exists.
+    // • Uploads the image to Cloudinary.
+    // • Removes the uploaded Cloudinary image if
+    //   saving MongoDB fails.
+    // ==================================================
+
+    const currentUserId = this.getCurrentUserId(req);
+
+    const user = await User.findById(currentUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.profileImage) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image already exists. Use the replace endpoint",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image is required",
+      });
+    }
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "user",
+      originalName: req.file.originalname,
+    });
+
+    try {
+      user.profileImage = this.buildUploadedImage(uploaded);
+
+      await user.save();
+    } catch (error) {
+      try {
+        await deleteImage(uploaded.public_id);
+      } catch (cleanupError) {
+        console.error(
+          "Failed to clean newly uploaded profile image:",
+          cleanupError.message,
+        );
+      }
+
+      throw error;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile image uploaded successfully",
+      data: sanitizeUser(user),
+    });
+  };
+
+  // ==================================================
+  // Replace profile image
+  // ==================================================
+  replaceProfileImage = async (req, res) => {
+    // • Uploads and saves the new image first.
+    // • Deletes the previous Cloudinary image only
+    //   after MongoDB saves successfully.
+    // • Does not fail the completed update when
+    //   deleting the old Cloudinary image fails.
+    // ==================================================
+
+    const currentUserId = this.getCurrentUserId(req);
+
+    const user = await User.findById(currentUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Profile image is required",
+      });
+    }
+
+    const oldImage = user.profileImage;
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "user",
+      originalName: req.file.originalname,
+    });
+
+    try {
+      user.profileImage = this.buildUploadedImage(uploaded);
+
+      await user.save();
+    } catch (error) {
+      try {
+        await deleteImage(uploaded.public_id);
+      } catch (cleanupError) {
+        console.error(
+          "Failed to clean newly uploaded profile image:",
+          cleanupError.message,
+        );
+      }
+
+      throw error;
+    }
+
+    // Delete the previous image only after
+    // the new image is saved successfully.
+    if (oldImage?.publicId) {
+      try {
+        await deleteImage(oldImage.publicId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete old profile image:",
+          cloudinaryError.message,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: oldImage
+        ? "Profile image replaced successfully"
+        : "Profile image uploaded successfully",
+      data: sanitizeUser(user),
+    });
+  };
+
+  // ==================================================
+  // Delete profile image
+  // ==================================================
+  deleteProfileImage = async (req, res) => {
+    // • Removes the profile image reference from
+    //   MongoDB first.
+    // • Attempts to delete the Cloudinary image after
+    //   MongoDB saves successfully.
+    // • Cloudinary deletion failure does not restore
+    //   the removed MongoDB reference.
+    // ==================================================
+
+    const currentUserId = this.getCurrentUserId(req);
+
+    const user = await User.findById(currentUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.profileImage) {
+      return res.status(404).json({
+        success: false,
+        message: "Profile image not found",
+      });
+    }
+
+    const imageToDelete = user.profileImage;
+
+    // Remove the MongoDB reference first.
+    user.profileImage = null;
+
+    await user.save();
+
+    // Delete the Cloudinary file after MongoDB succeeds.
+    if (imageToDelete.publicId) {
+      try {
+        await deleteImage(imageToDelete.publicId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete profile image from Cloudinary:",
+          cloudinaryError.message,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile image deleted successfully",
+      data: sanitizeUser(user),
+    });
+  };
+
+  // ==================================================
+  // Create user account by Super Admin
   // ==================================================
   adminCreateUser = async (req, res) => {
-    // ==================================================
-    // • Creates a new user account directly by the Super Admin.
-    // • Allows only adopter, shelterEmployee, and vet roles.
-    // • Prevents creating another account with the same email.
-    // • Hashes the password before storing it in the database.
-    // • Automatically creates the profile related to the selected role.
-    // • Password hash is excluded from the response.
-    // • Access is restricted to Super Admin only.
+    // • Creates a user account directly by Super Admin.
+    // • Allows adopter, Shelter Employee, and Vet only.
+    // • Prevents duplicate emails.
+    // • Hashes the password.
+    // • Creates the profile related to the selected role.
+    // • Deletes the created user if profile creation fails.
     // ==================================================
 
     const { firstName, lastName, email, password, role } = req.body;
 
-    // Check if the email is already registered
-    const existingUser = await User.findOne({ email });
+    if (!ALLOWED_USER_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Role must be adopter, shelterEmployee, or vet",
+      });
+    }
 
-    // Hash the user's password before saving it
-    const hashedPassword = await passwordService.hash(password);
+    const normalizedEmail = email.trim().toLowerCase();
 
-    // Create the user account
-    let newUser = await User.create({
-      firstName,
-      lastName,
-      email,
-      password: hashedPassword,
-      role,
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
     });
 
-    // Prepare the initial role profile data
-    const profileData = {
-      userId: newUser._id,
-      isActive: newUser.isActive,
-    };
-
-    // Create the adopter profile
-    if (role === "adopter") {
-      await AdopterProfile.create(profileData);
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Email already exists",
+      });
     }
 
-    // Create the shelter employee profile
-    if (role === "shelterEmployee") {
-      await ShelterEmployeeProfile.create(profileData);
+    const hashedPassword = await passwordService.hash(password);
+
+    let newUser;
+
+    try {
+      newUser = await User.create({
+        firstName,
+        lastName,
+        email: normalizedEmail,
+        password: hashedPassword,
+        role,
+      });
+
+      await createRoleProfile({
+        userId: newUser._id,
+        role,
+        isActive: newUser.isActive,
+      });
+    } catch (error) {
+      // Prevent leaving a user account without its role profile.
+      if (newUser?._id) {
+        await User.findByIdAndDelete(newUser._id);
+      }
+
+      throw error;
     }
-
-    // Create the vet profile
-    if (role === "vet") {
-      await VetProfile.create(profileData);
-    }
-
-    // Remove sensitive fields before sending the response
-    newUser = newUser.toObject();
-
-    delete newUser.password;
-    delete newUser.passwordResetToken;
-    delete newUser.passwordResetExpires;
 
     return res.status(201).json({
       success: true,
       message: "User and role profile created successfully by admin",
-      data: newUser,
+      data: sanitizeUser(newUser),
     });
   };
 }
 
-module.exports = new UsersController();
+module.exports = new UserController();
