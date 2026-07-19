@@ -1,5 +1,3 @@
-// models/VetProfile.js
-
 const mongoose = require("mongoose");
 
 const vetProfileSchema = new mongoose.Schema(

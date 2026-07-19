@@ -48,14 +48,22 @@ const adopterProfileSchema = new mongoose.Schema(
       default: null,
     },
 
+    preferredSpecies: {
+      type: [String],
+      enum: ["dog", "cat", "bird", "rabbit", "fish", "other"],
+      default: [],
+    },
+
     isActive: {
-  type: Boolean,
-  default: true,
-}
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
   },
 );
 
-module.exports = mongoose.models.AdopterProfile|| mongoose.model("AdopterProfile", adopterProfileSchema);
+module.exports =
+  mongoose.models.AdopterProfile ||
+  mongoose.model("AdopterProfile", adopterProfileSchema);

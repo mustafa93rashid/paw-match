@@ -1,8 +1,15 @@
-
 const AdopterProfile = require("../models/AdopterProfile");
-
 class AdopterProfileController {
+  // ==================================================
+  // Get authenticated adopter profile
+  // ==================================================
   getMyProfile = async (req, res) => {
+    // ==================================================
+    // • Retrieves the authenticated adopter profile.
+    // • Loads the related user information.
+    // • Returns 404 if the profile does not exist.
+    // ==================================================
+
     const profile = await AdopterProfile.findOne({
       userId: req.user.id,
     }).populate(
@@ -24,7 +31,18 @@ class AdopterProfileController {
     });
   };
 
+  // ==================================================
+  // Create or update authenticated adopter profile
+  // ==================================================
   updateMyProfile = async (req, res) => {
+    // ==================================================
+    // • Allows updating only approved profile fields.
+    // • Ignores any fields outside the whitelist.
+    // • Creates the profile automatically if it does not exist.
+    // • Runs Mongoose validation before saving.
+    // • Returns the updated profile with user information.
+    // ==================================================
+
     const allowedFields = [
       "homeType",
       "hasKids",
@@ -66,7 +84,17 @@ class AdopterProfileController {
     });
   };
 
+  // ==================================================
+  // Get all adopter profiles
+  // ==================================================
   getAllAdopters = async (req, res) => {
+    // ==================================================
+    // • Retrieves all adopter profiles.
+    // • Loads related user information for each profile.
+    // • Returns the total number of profiles.
+    // • Accessible by Super Admin only.
+    // ==================================================
+
     const profiles = await AdopterProfile.find().populate(
       "userId",
       "firstName lastName email phone address profileImage role isActive",
@@ -80,10 +108,22 @@ class AdopterProfileController {
     });
   };
 
-  getAdopterById = async (req, res) => {
-    const profile = await AdopterProfile.findById(req.params.id).populate(
+  // ==================================================
+  // Get adopter profile by user ID
+  // ==================================================
+  getAdopterByUserId = async (req, res) => {
+    // ==================================================
+    // • Retrieves an adopter profile using the user's ID.
+    // • Loads the related user information.
+    // • Returns 404 if the profile does not exist.
+    // • Accessible by Super Admin and Shelter Employee.
+    // ==================================================
+
+    const profile = await AdopterProfile.findOne({
+      userId: req.params.userId,
+    }).populate(
       "userId",
-      "firstName lastName email phone address profileImage role isActive",
+      "firstName lastName email phone dateOfBirth gender address profileImage role isActive",
     );
 
     if (!profile) {
@@ -99,7 +139,6 @@ class AdopterProfileController {
       data: profile,
     });
   };
-
 }
 
 module.exports = new AdopterProfileController();

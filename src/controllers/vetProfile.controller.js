@@ -1,12 +1,19 @@
-// controllers/vetProfile.controller.js
-
-const mongoose = require("mongoose");
 const VetProfile = require("../models/VetProfile");
 
 class VetProfileController {
-  // Get current vet profile
+  // ==================================================
+  // Get authenticated vet profile
+  // ==================================================
   getMyProfile = async (req, res) => {
-    const currentUserId = req.user._id 
+    // ==================================================
+    // • Retrieves the authenticated vet profile.
+    // • Loads the related user personal information.
+    // • Loads the shelter assigned to the vet.
+    // • Returns 404 if the vet profile does not exist.
+    // • Access is restricted to authenticated vets only.
+    // ==================================================
+
+    const currentUserId = req.user._id;
 
     const profile = await VetProfile.findOne({
       userId: currentUserId,
@@ -34,9 +41,20 @@ class VetProfileController {
     });
   };
 
-  // Update current vet profile
+  // ==================================================
+  // Update authenticated vet profile
+  // ==================================================
   updateMyProfile = async (req, res) => {
-    const currentUserId = req.user._id || req.user.id;
+    // ==================================================
+    // • Allows the authenticated vet to update professional data.
+    // • Updates specialization, bio, experience, availability,
+    //   and consultation types.
+    // • Prevents updating protected profile fields.
+    // • Returns 404 if the vet profile does not exist.
+    // • Access is restricted to authenticated vets only.
+    // ==================================================
+
+    const currentUserId = req.user._id;
 
     const allowedFields = [
       "specialization",
@@ -58,7 +76,9 @@ class VetProfileController {
       {
         userId: currentUserId,
       },
-      updateData,
+      {
+        $set: updateData,
+      },
       {
         new: true,
         runValidators: true,
@@ -87,8 +107,18 @@ class VetProfileController {
     });
   };
 
-  // Get all active vets
+  // ==================================================
+  // Get all active vet profiles
+  // ==================================================
   getAll = async (req, res) => {
+    // ==================================================
+    // • Retrieves all active vet profiles.
+    // • Supports filtering by shelter and specialization.
+    // • Loads the related user and shelter information.
+    // • Sorts the results from newest to oldest.
+    // • Access requires authentication.
+    // ==================================================
+
     const { shelterId, specialization } = req.query;
 
     const filter = {
@@ -96,13 +126,6 @@ class VetProfileController {
     };
 
     if (shelterId) {
-      if (!mongoose.Types.ObjectId.isValid(shelterId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid shelter ID",
-        });
-      }
-
       filter.shelterId = shelterId;
     }
 
@@ -122,7 +145,9 @@ class VetProfileController {
         "shelterId",
         "name email phone address city logo isActive",
       )
-      .sort({ createdAt: -1 });
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json({
       success: true,
@@ -132,18 +157,23 @@ class VetProfileController {
     });
   };
 
-  // Get vet by profile ID
+  // ==================================================
+  // Get vet profile by User ID
+  // ==================================================
   getOne = async (req, res) => {
-    const { id } = req.params;
+    // ==================================================
+    // • Retrieves a vet profile using the User ID.
+    // • Loads the related user personal information.
+    // • Loads the shelter assigned to the vet.
+    // • Returns 404 if the vet profile does not exist.
+    // • Access requires authentication.
+    // ==================================================
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid vet profile ID",
-      });
-    }
+    const { userId } = req.params;
 
-    const profile = await VetProfile.findById(id)
+    const profile = await VetProfile.findOne({
+      userId,
+    })
       .populate(
         "userId",
         "firstName lastName email phone dateOfBirth gender address profileImage role isActive",

@@ -17,6 +17,11 @@ app.use("/api/v1/user", require("./routes/user.route"));
 // Modified by Batoul - Reason: Task 5 - Register shelter routes
 app.use("/api/v1/shelter", require("./routes/shelter.route"));
 
+// zain-Evaluation system
+app.use("/api/v1/reviews", require("./routes/review.route"));
+
+// zain-Smart notification system
+app.use("/api/v1/notifications", require("./routes/notification.route"));
 
 // app.use("/api/v1/debug-upload", require("./routes/test-upload.routes"));//this line is just for testin image upload
 
@@ -38,6 +43,9 @@ app.use("/api/v1/adoptions", require("./routes/adoptionRequest.route"));
 
 //Appointment
 app.use("/api/v1/appointments", require("./routes/appointment.route"));
+
+//VetAppointment
+app.use("/api/v1/vetappointments", require("./routes/vetAppointment.route"));
 
 // Matching routes
 app.use("/api/v1/matching", require("./routes/matching.route"));

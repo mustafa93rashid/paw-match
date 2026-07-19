@@ -1,15 +1,27 @@
 const express = require("express");
 const router = express.Router();
+
 const animalController = require("../controllers/animal.controller");
+const animalValidation = require("../validation/animal.validate");
+
 const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
+
 const { uploadArray } = require("../middlewares/upload.middleware");
 const pagination = require("../middlewares/pagination");
 
 // Create animal
-router.post("/", [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 10)], asyncHandler(animalController.createAnimal));
-
+router.post(
+  "/",
+  [
+    auth,
+    role(["shelterEmployee", "superadmin"]),
+    uploadArray("images", 10),
+    animalValidation.createAnimalValidation,
+  ],
+  asyncHandler(animalController.createAnimal)
+);
 
 router.post(
   "/:id/images",
@@ -23,18 +35,21 @@ router.delete(
   asyncHandler(animalController.deleteAnimalImage),
 );
 // Get all animals
-router.get("/",  [auth, pagination], asyncHandler(animalController.getAll));
-
+router.get(
+  "/",
+  [auth, pagination, animalValidation.getAllAnimalsValidation],
+  asyncHandler(animalController.getAll)
+);
 // Get animal by ID
-router.get("/:id", [auth], asyncHandler(animalController.getOne));
+router.get("/:id", [auth, animalValidation.getAnimalByIdValidation], asyncHandler(animalController.getOne));
 
 // Update animal
-router.patch("/:id", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.updateAnimal));
+router.patch("/:id", [auth, role(["shelterEmployee", "superadmin"]), animalValidation.updateAnimalValidation], asyncHandler(animalController.updateAnimal));
 
-// Delete animal (soft delete)
-router.delete("/:id", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.removeAnimal));
+// Delete animal
+router.delete("/:id", [auth, role(["shelterEmployee", "superadmin"]), animalValidation.removeAnimalValidation], asyncHandler(animalController.removeAnimal));
 
 // Restore animal
-router.patch("/:id/restore", [auth, role(["shelterEmployee", "superadmin"])], asyncHandler(animalController.restoreAnimal));
+router.patch("/:id/restore", [auth, role(["shelterEmployee", "superadmin"]), animalValidation.restoreAnimalValidation], asyncHandler(animalController.restoreAnimal));
 
 module.exports = router;
