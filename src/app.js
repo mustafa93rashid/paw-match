@@ -1,5 +1,7 @@
 require("dotenv").config();
 const express = require("express");
+const http = require("http"); 
+const { initSocket } = require("./utils/socket");
 const app = express();
 const mongoose = require("mongoose");
 const cookies = require("cookie-parser");
@@ -54,12 +56,18 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 3000;
 const MONGODB_URL = process.env.MONGODB_URL;
 
+const server = http.createServer(app);
+
+// 2. تهيئة الـ Sockets باستخدام السيرفر
+initSocket(server);
+
+// 3. تشغيل السيرفر من خلال المتغير server وليس app
 mongoose.connect(MONGODB_URL)
     .then(() => {
         console.log("Connected to MONGODB Successfully");
-        app.listen(PORT, () => {
+        server.listen(PORT, () => {
             console.log(`Server is running on http://localhost:${PORT}`);
-        })
+        });
     })
     .catch(err => {
         console.log('Error MONGODB', err.message);

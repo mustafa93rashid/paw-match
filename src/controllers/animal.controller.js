@@ -3,6 +3,10 @@ const mongoose = require("mongoose");
 const Animal = require("../models/Animal");
 const Shelter = require("../models/Shelter");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
+const { calculateMatchScore } = require("../services/matching.service");
+const AdopterProfile = require("../models/AdopterProfile");
+const { runSmartMatchEngine } = require("../services/matching.service");
+const matchingService = require("../services/matching.service");
 
 class AnimalsController {
   // ==================================================
@@ -175,8 +179,8 @@ class AnimalsController {
       .populate("shelterId", "name city")
       .populate("addedBy", "firstName lastName role");
 
-      //zain
-      const matchingService = require("../services/matching.service");
+      
+    
     matchingService.runSmartMatchEngine(animal);
 
     return res.status(201).json({
