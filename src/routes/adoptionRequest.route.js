@@ -1,84 +1,40 @@
 const router = require("express").Router();
 
-const adoptionRequestController = require(
-  "../controllers/adoptionRequest.controller",
-);
+const adoptionRequestController = require("../controllers/adoptionRequest.controller");
+const adoptionRequestValidation = require("../validation/adoptionRequest.validate");
 
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
+const asyncHandler = require("../utils/asyncHandler");
 
-router.post(
-  "/",
-  auth,
-  role(["adopter"]),
-  adoptionRequestController.createRequest,
-);
+// Create a new adoption request
+router.post("/", [auth, role(["adopter"]), adoptionRequestValidation.createRequestValidation], asyncHandler(adoptionRequestController.createRequest));
 
-router.get(
-  "/my",
-  auth,
-  role(["adopter"]),
-  adoptionRequestController.getMyRequests,
-);
+// Get the current adopter requests
+router.get("/my", [auth, role(["adopter"]), adoptionRequestValidation.getMyRequestsValidation], asyncHandler(adoptionRequestController.getMyRequests));
 
-router.get(
-  "/shelter",
-  auth,
-  role(["shelterEmployee", "superadmin"]),
-  adoptionRequestController.getShelterRequests,
-);
+// Get shelter adoption requests
+router.get("/shelter", [auth, role(["shelterEmployee", "superadmin"]), adoptionRequestValidation.getShelterRequestsValidation], asyncHandler(adoptionRequestController.getShelterRequests));
 
-router.get(
-  "/:id",
-  auth,
-  role([
-    "adopter",
-    "shelterEmployee",
-    "superadmin",
-  ]),
-  adoptionRequestController.getRequestById,
-);
+// Get one adoption request
+router.get("/:id", [auth, role(["adopter", "shelterEmployee", "superadmin"]), adoptionRequestValidation.getRequestByIdValidation], asyncHandler(adoptionRequestController.getRequestById));
 
-router.patch(
-  "/:id/status",
-  auth,
-  role(["shelterEmployee", "superadmin"]),
-  adoptionRequestController.updateRequestStatus,
-);
+// Move the request between review stages
+router.patch("/:id/status", [auth, role(["shelterEmployee", "superadmin"]), adoptionRequestValidation.updateRequestStatusValidation], asyncHandler(adoptionRequestController.updateRequestStatus));
 
-router.patch(
-  "/:id/approve",
-  auth,
-  role(["shelterEmployee", "superadmin"]),
-  adoptionRequestController.approveRequest,
-);
+// Approve an adoption request
+router.patch("/:id/approve", [auth, role(["shelterEmployee", "superadmin"]), adoptionRequestValidation.approveRequestValidation], asyncHandler(adoptionRequestController.approveRequest));
 
-router.patch(
-  "/:id/reject",
-  auth,
-  role(["shelterEmployee", "superadmin"]),
-  adoptionRequestController.rejectRequest,
-);
+// Reject an adoption request
+router.patch("/:id/reject", [auth, role(["shelterEmployee", "superadmin"]), adoptionRequestValidation.rejectRequestValidation], asyncHandler(adoptionRequestController.rejectRequest));
 
-router.patch(
-  "/:id/cancel",
-  auth,
-  role(["adopter"]),
-  adoptionRequestController.cancelMyRequest,
-);
+// Cancel the current adopter request
+router.patch("/:id/cancel", [auth, role(["adopter"]), adoptionRequestValidation.cancelMyRequestValidation], asyncHandler(adoptionRequestController.cancelMyRequest));
 
-router.patch(
-  "/:id/complete",
-  auth,
-  role(["shelterEmployee", "superadmin"]),
-  adoptionRequestController.completeRequest,
-);
+// Complete the adoption process
+router.patch("/:id/complete", [auth, role(["shelterEmployee", "superadmin"]), adoptionRequestValidation.completeRequestValidation], asyncHandler(adoptionRequestController.completeRequest));
 
-router.patch(
-  "/:id/cancel-approval",
-  auth,
-  role(["shelterEmployee", "superadmin"]),
-  adoptionRequestController.cancelApprovedRequest,
-);
+// Cancel an approved adoption request
+router.patch("/:id/cancel-approval", [auth, role(["shelterEmployee", "superadmin"]), adoptionRequestValidation.cancelApprovedRequestValidation], asyncHandler(adoptionRequestController.cancelApprovedRequest));
 
 module.exports = router;
