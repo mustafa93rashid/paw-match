@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const imageSchema= require("../models/image_schema");
 
 const userSchema = new mongoose.Schema(
   {
@@ -57,6 +58,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["superadmin", "shelterEmployee", "vet", "adopter"],
       default: "adopter",
+    },
+
+    profileImage: {
+      type: imageSchema,
+      // default: null,
     },
 
     address: {

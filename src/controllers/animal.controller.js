@@ -3,10 +3,13 @@ const mongoose = require("mongoose");
 const Animal = require("../models/Animal");
 const Shelter = require("../models/Shelter");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
-const { calculateMatchScore } = require("../services/matching.service");
-const AdopterProfile = require("../models/AdopterProfile");
+
 const { runSmartMatchEngine } = require("../services/matching.service");
-const matchingService = require("../services/matching.service");
+
+const {
+  uploadBufferToCloudinary,
+  deleteImages,
+} = require("../services/cloudinary.service");
 
 class AnimalsController {
   // ==================================================
@@ -31,6 +34,8 @@ class AnimalsController {
   // • Super Admin can manage animals from any shelter.
   // • Shelter Employees can manage animals belonging
   //   to their assigned shelter only.
+  // • The employee profile must be active.
+  // • The employee must be assigned to a shelter.
   // • Other roles are not allowed to manage animals.
   // ==================================================
   canManageAnimal = async (user, animal) => {
@@ -55,7 +60,8 @@ class AnimalsController {
   // Check if a shelter is approved and active
   // ==================================================
   // • Checks that the shelter exists.
-  // • Checks that the shelter is verified and approved.
+  // • Checks that the shelter is verified.
+  // • Checks that the verification status is approved.
   // • Checks that the shelter is currently active.
   // • Used when creating, transferring, or restoring animals.
   // ==================================================
@@ -75,9 +81,12 @@ class AnimalsController {
   // • Shelter Employees can add animals to their shelter only.
   // • Super Admin must provide a valid Shelter ID.
   // • The shelter must be verified, approved, and active.
-  // • Accepts only explicitly allowed animal fields.
+  // • Requires at least one uploaded animal image.
+  // • Uploads images to Cloudinary.
+  // • Stores the image URL and Cloudinary public ID.
+  // • Removes uploaded images if animal creation fails.
   // • Prevents the client from controlling isActive,
-  //   adoptionStatus, shelterId, and addedBy.
+  //   adoptionStatus, shelterId, addedBy, and images.
   // • Animals are created as active and available.
   // ==================================================
   createAnimal = async (req, res) => {
@@ -85,6 +94,8 @@ class AnimalsController {
 
     let shelterId;
 
+    // Shelter Employee uses the shelter assigned
+    // to the active employee profile.
     if (req.user.role === "shelterEmployee") {
       const employeeProfile = await this.getEmployeeProfile(currentUserId);
 
@@ -105,6 +116,7 @@ class AnimalsController {
       shelterId = employeeProfile.shelterId;
     }
 
+    // Super Admin must select the shelter manually.
     if (req.user.role === "superadmin") {
       shelterId = req.body.shelterId;
 
@@ -139,55 +151,99 @@ class AnimalsController {
       });
     }
 
-    const {
-      name,
-      age,
-      ageUnit,
-      species,
-      breed,
-      gender,
-      size,
-      color,
-      healthStatus,
-      vaccinated,
-      description,
-      images,
-      requirements,
-    } = req.body;
+    // At least one image is required.
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one animal image is required",
+      });
+    }
 
-    const animal = await Animal.create({
-      name,
-      age,
-      ageUnit,
-      species,
-      breed,
-      gender,
-      size,
-      color,
-      healthStatus,
-      vaccinated,
-      description,
-      images,
-      requirements,
-      shelterId,
-      addedBy: currentUserId,
-      adoptionStatus: "available",
-      isActive: true,
-    });
+    const uploadedImages = [];
 
-    const populatedAnimal = await Animal.findById(animal._id)
-      .populate("shelterId", "name city")
-      .populate("addedBy", "firstName lastName role");
+    try {
+      // Upload every image to Cloudinary.
+      for (const file of req.files) {
+        const uploaded = await uploadBufferToCloudinary({
+          buffer: file.buffer,
+          folder: "animal",
+          originalName: file.originalname,
+        });
 
-      
-    
-    matchingService.runSmartMatchEngine(animal);
+        uploadedImages.push({
+          url: uploaded.secure_url,
+          publicId: uploaded.public_id,
+        });
+      }
 
-    return res.status(201).json({
-      success: true,
-      message: "Animal created successfully",
-      data: populatedAnimal,
-    });
+      // Only explicitly allowed fields are accepted.
+      const {
+        name,
+        age,
+        ageUnit,
+        species,
+        breed,
+        gender,
+        size,
+        color,
+        healthStatus,
+        vaccinated,
+        description,
+        requirements,
+      } = req.body;
+
+      const animal = await Animal.create({
+        name,
+        age,
+        ageUnit,
+        species,
+        breed,
+        gender,
+        size,
+        color,
+        healthStatus,
+        vaccinated,
+        description,
+        requirements,
+        images: uploadedImages,
+        shelterId,
+        addedBy: currentUserId,
+        adoptionStatus: "available",
+        isActive: true,
+      });
+
+      const populatedAnimal = await Animal.findById(animal._id)
+        .populate("shelterId", "name city")
+        .populate("addedBy", "firstName lastName role");
+
+      // Smart matching is a secondary process.
+      // Its failure must not cancel animal creation.
+      try {
+        await runSmartMatchEngine(animal);
+      } catch (matchingError) {
+        console.error("Smart matching failed:", matchingError.message);
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: "Animal created successfully",
+        data: populatedAnimal,
+      });
+    } catch (error) {
+      // Remove Cloudinary images if creation fails.
+      if (uploadedImages.length > 0) {
+        try {
+          await deleteImages(uploadedImages.map((image) => image.publicId));
+        } catch (cleanupError) {
+          console.error(
+            "Failed to clean uploaded animal images:",
+            cleanupError.message,
+          );
+        }
+      }
+
+      throw error;
+    }
   };
 
   // ==================================================
@@ -198,6 +254,7 @@ class AnimalsController {
   // • Validates Boolean query values before using them.
   // • Returns active animals by default.
   // • Only Super Admin can request inactive animals.
+  // • Supports filtering by shelter and adoption status.
   // ==================================================
   getAll = async (req, res) => {
     const {
@@ -273,6 +330,8 @@ class AnimalsController {
       }
     }
 
+    // Super Admin can request active or inactive animals.
+    // Other roles always receive active animals only.
     if (req.user.role === "superadmin" && isActive !== undefined) {
       filter.isActive = isActive === "true";
     } else {
@@ -319,8 +378,7 @@ class AnimalsController {
   // • Validates the Animal ID.
   // • Returns active animals only.
   // • Returns basic shelter information.
-  // • Does not expose the email of the employee
-  //   who added the animal.
+  // • Does not expose the employee email.
   // ==================================================
   getOne = async (req, res) => {
     const { id } = req.params;
@@ -352,7 +410,6 @@ class AnimalsController {
       data: animal,
     });
   };
-
   // ==================================================
   // Update animal
   // ==================================================
@@ -360,6 +417,7 @@ class AnimalsController {
   // • Shelter Employees can update animals belonging
   //   to their assigned shelter only.
   // • Updates only explicitly allowed animal fields.
+  // • Prevents changing images through this endpoint.
   // • Prevents changing isActive through this endpoint.
   // • Prevents changing adoptionStatus through this endpoint.
   // • Adoption status must be controlled through
@@ -395,6 +453,7 @@ class AnimalsController {
       });
     }
 
+    // Prevent changing the active status manually.
     if (req.body.isActive !== undefined) {
       return res.status(400).json({
         success: false,
@@ -403,11 +462,21 @@ class AnimalsController {
       });
     }
 
+    // Prevent changing adoption status manually.
     if (req.body.adoptionStatus !== undefined) {
       return res.status(400).json({
         success: false,
         message:
           "Animal adoption status must be changed through the adoption request process",
+      });
+    }
+
+    // Images must only be managed through
+    // the image add and delete endpoints.
+    if (req.body.images !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Animal images must be managed through image endpoints",
       });
     }
 
@@ -423,7 +492,6 @@ class AnimalsController {
       "healthStatus",
       "vaccinated",
       "description",
-      "images",
     ];
 
     allowedFields.forEach((field) => {
@@ -432,6 +500,8 @@ class AnimalsController {
       }
     });
 
+    // Only Super Admin can transfer an animal
+    // to another shelter.
     if (req.user.role === "superadmin" && req.body.shelterId !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(req.body.shelterId)) {
         return res.status(400).json({
@@ -460,16 +530,14 @@ class AnimalsController {
       animal.shelterId = newShelter._id;
     }
 
-    if (
-      req.user.role !== "superadmin" &&
-      req.body.shelterId !== undefined
-    ) {
+    if (req.user.role !== "superadmin" && req.body.shelterId !== undefined) {
       return res.status(403).json({
         success: false,
         message: "Only Super Admin can change the animal shelter",
       });
     }
 
+    // Update animal matching requirements safely.
     if (req.body.requirements !== undefined) {
       const requirements = req.body.requirements;
 
@@ -515,6 +583,7 @@ class AnimalsController {
   // • Changes isActive to false only.
   // • Keeps the current adoptionStatus so it can be
   //   preserved if the animal is restored later.
+  // • Does not delete the animal images from Cloudinary.
   // ==================================================
   removeAnimal = async (req, res) => {
     const { id } = req.params;
@@ -645,6 +714,233 @@ class AnimalsController {
     return res.status(200).json({
       success: true,
       message: "Animal restored successfully",
+      data: populatedAnimal,
+    });
+  };
+  
+  // ==================================================
+  // Build uploaded image object
+  // ==================================================
+  // • Converts the Cloudinary upload result into
+  //   the image structure stored inside the Animal model.
+  // • Stores both the secure URL and public ID.
+  // ==================================================
+  buildUploadedImage = (result) => ({
+    url: result.secure_url,
+    publicId: result.public_id,
+  });
+
+  // ==================================================
+  // Add animal images
+  // ==================================================
+  // • Allows Shelter Employees and Super Admin only.
+  // • Shelter Employees can add images only to animals
+  //   belonging to their assigned shelter.
+  // • Super Admin can add images to any animal.
+  // • Prevents adding images to inactive animals.
+  // • Requires at least one uploaded image.
+  // • Prevents exceeding the maximum image count.
+  // • Uploads images to Cloudinary.
+  // • Stores the image URL and Cloudinary public ID.
+  // • Removes newly uploaded images if saving fails.
+  // ==================================================
+  addAnimalImages = async (req, res) => {
+    const { id } = req.params;
+
+    const MAX_ANIMAL_IMAGES = 8;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid animal ID",
+      });
+    }
+
+    const animal = await Animal.findById(id);
+
+    if (!animal) {
+      return res.status(404).json({
+        success: false,
+        message: "Animal not found",
+      });
+    }
+
+    const allowed = await this.canManageAnimal(req.user, animal);
+
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this animal",
+      });
+    }
+
+    if (!animal.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Images cannot be added to an inactive animal",
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one image is required",
+      });
+    }
+
+    const currentImagesCount = animal.images?.length || 0;
+
+    const requestedImagesCount = req.files.length;
+
+    if (currentImagesCount + requestedImagesCount > MAX_ANIMAL_IMAGES) {
+      return res.status(400).json({
+        success: false,
+        message: `Animal cannot have more than ${MAX_ANIMAL_IMAGES} images`,
+      });
+    }
+
+    const uploadedImages = [];
+
+    try {
+      for (const file of req.files) {
+        const uploaded = await uploadBufferToCloudinary({
+          buffer: file.buffer,
+          folder: "animal",
+          originalName: file.originalname,
+        });
+
+        uploadedImages.push(this.buildUploadedImage(uploaded));
+      }
+
+      animal.images.push(...uploadedImages);
+
+      await animal.save();
+
+      const populatedAnimal = await Animal.findById(animal._id)
+        .populate("shelterId", "name city address")
+        .populate("addedBy", "firstName lastName role");
+
+      return res.status(200).json({
+        success: true,
+        message: "Animal images added successfully",
+        data: populatedAnimal,
+      });
+    } catch (error) {
+      if (uploadedImages.length > 0) {
+        try {
+          await deleteImages(uploadedImages.map((image) => image.publicId));
+        } catch (cleanupError) {
+          console.error(
+            "Failed to clean uploaded animal images:",
+            cleanupError.message,
+          );
+        }
+      }
+
+      throw error;
+    }
+  };
+
+  // ==================================================
+  // Delete animal image
+  // ==================================================
+  // • Allows Shelter Employees and Super Admin only.
+  // • Shelter Employees can delete images only from
+  //   animals belonging to their assigned shelter.
+  // • Super Admin can delete images from any animal.
+  // • Receives the Cloudinary public ID from req.body.
+  // • Prevents deleting the last remaining image.
+  // • Removes the image from MongoDB first.
+  // • Then attempts to remove it from Cloudinary.
+  // • A Cloudinary failure does not restore a removed
+  //   MongoDB image reference.
+  // ==================================================
+  deleteAnimalImage = async (req, res) => {
+    const { id } = req.params;
+    const { publicId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid animal ID",
+      });
+    }
+
+    if (!publicId || typeof publicId !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Image public ID is required",
+      });
+    }
+
+    const animal = await Animal.findById(id);
+
+    if (!animal) {
+      return res.status(404).json({
+        success: false,
+        message: "Animal not found",
+      });
+    }
+
+    const allowed = await this.canManageAnimal(req.user, animal);
+
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this animal",
+      });
+    }
+
+    if (!animal.images || animal.images.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Animal has no images",
+      });
+    }
+
+    if (animal.images.length <= 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Animal must have at least one image",
+      });
+    }
+
+    const imageIndex = animal.images.findIndex(
+      (image) => String(image.publicId) === String(publicId),
+    );
+
+    if (imageIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: "Image not found",
+      });
+    }
+
+    const imageToDelete = animal.images[imageIndex];
+
+    // Remove the image reference from MongoDB first.
+    animal.images.splice(imageIndex, 1);
+
+    await animal.save();
+
+    // Cloudinary deletion is handled separately.
+    // Its failure must not make the database response fail.
+    try {
+      await deleteImage(imageToDelete.publicId);
+    } catch (cloudinaryError) {
+      console.error(
+        "Failed to delete animal image from Cloudinary:",
+        cloudinaryError.message,
+      );
+    }
+
+    const populatedAnimal = await Animal.findById(animal._id)
+      .populate("shelterId", "name city address")
+      .populate("addedBy", "firstName lastName role");
+
+    return res.status(200).json({
+      success: true,
+      message: "Animal image deleted successfully",
       data: populatedAnimal,
     });
   };

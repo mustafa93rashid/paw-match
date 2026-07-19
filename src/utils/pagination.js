@@ -2,7 +2,7 @@
 
 const Animal = require("../models/Animal");
 
-const getPaginatedAnimals=  (req, res, next) => {
+const pagination=  (req, res, next) => {
     let { page, limit } = req.query;
     page = parseInt(page) || 1;
     limit = parseInt(limit) || 10;
@@ -19,4 +19,4 @@ const getPaginatedAnimals=  (req, res, next) => {
     next();
 };
 
-module.exports =  getPaginatedAnimals;
+module.exports =  pagination;

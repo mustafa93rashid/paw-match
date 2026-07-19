@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Shelter = require("../models/Shelter");
 const User = require("../models/User");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
@@ -5,39 +6,34 @@ const VetProfile = require("../models/VetProfile");
 const Animal = require("../models/Animal");
 const AdoptionRequest = require("../models/AdoptionRequest");
 
+const {uploadBufferToCloudinary, deleteImage, deleteImages} = require("../services/cloudinary.service");
+
+// Maximum number of gallery images for one shelter.
+const MAX_SHELTER_IMAGES = 8;
+
 //============================================================
 // Check Shelter Employee Permission
 //============================================================
-
 const checkShelterEmployeePermission = async ({
   //
   // • Determines whether a user can manage a shelter
   //   and its employees.
-  //
-  // • Grants full access to superadmins for every shelter.
-  //
-  // • Rejects all roles except shelter employees.
-  //
-  // • Requires the user and shelter to have valid IDs.
-  //
-  // • Verifies that the user exists in the shelter's
+  // • Grants full access to Super Admin for every shelter.
+  // • Rejects all roles except Shelter Employees.
+  // • Requires the employee to exist in the shelter's
   //   employee list.
-  //
-  // • Requires an active employee profile linked to the
-  //   same shelter.
-  //
+  // • Requires an active Shelter Employee profile linked
+  //   to the same shelter.
   // • Grants permission only when the employee position
   //   is Manager.
-  //
-  // • Supports an optional database session when the
-  //   permission check runs inside a transaction.
-  //
+  // • The shelter creator does not receive permanent
+  //   permission based only on createdBy.
+  // • Supports an optional database session.
   //============================================================
   user,
   shelter,
   session = null,
 }) => {
-  // Important: Superadmins can manage employees in any shelter.
   if (user.role === "superadmin") {
     return true;
   }
@@ -52,7 +48,6 @@ const checkShelterEmployeePermission = async ({
     return false;
   }
 
-  // Important: The employee must exist in the shelter's employee list.
   const existsInShelter = shelter.employees.some(
     (employeeId) => String(employeeId) === String(userId),
   );
@@ -61,7 +56,6 @@ const checkShelterEmployeePermission = async ({
     return false;
   }
 
-  // Important: Permission requires an active Manager profile linked to the same shelter.
   let employeeProfileQuery = ShelterEmployeeProfile.findOne({
     userId,
     shelterId: shelter._id,
@@ -77,43 +71,60 @@ const checkShelterEmployeePermission = async ({
 
   return Boolean(employeeProfile);
 };
+
 class ShelterController {
+  //============================================================
+  // Build Uploaded Image
+  //============================================================
+  // • Converts the Cloudinary upload response into
+  //   the image structure stored in MongoDB.
+  // • Stores both secure URL and public ID.
+  //============================================================
+  buildUploadedImage = (result) => ({
+    url: result.secure_url,
+    publicId: result.public_id,
+  });
+
+  //============================================================
+  // Check Shelter Availability
+  //============================================================
+  // • Returns true only when the shelter is:
+  //   approved, verified, and active.
+  //============================================================
+  isShelterAvailable = (shelter) => {
+    return (
+      shelter &&
+      shelter.verificationStatus === "approved" &&
+      shelter.isVerified === true &&
+      shelter.isActive === true
+    );
+  };
+
   //============================================================
   // Create Shelter
   //============================================================
   createShelter = async (req, res) => {
-    //
-    // • Creates a new shelter and records the authenticated user
-    //   as the shelter creator.
-    //
-    // • Prevents duplicate shelters by ensuring the email address
-    //   is unique before creation.
-    //
-    // • If the creator is a shelter employee, verifies that they
-    //   have an active employee profile and are not already linked
-    //   to another shelter.
-    //
-    // • Automatically adds the shelter employee as the first
-    //   employee of the newly created shelter.
-    //
-    // • Converts the provided latitude and longitude into a
-    //   GeoJSON Point using the required [longitude, latitude] format.
-    //
+    // • Creates a new shelter and records the authenticated
+    //   user as the shelter creator.
+    // • Prevents duplicate shelters by email.
+    // • Does not accept logo or gallery images through
+    //   the request body.
+    // • Logo and gallery images must be managed through
+    //   their dedicated upload endpoints.
+    // • If the creator is a Shelter Employee, verifies
+    //   that an active employee profile exists.
+    // • Prevents the employee from creating another shelter
+    //   while their profile is linked to an existing shelter.
+    // • Automatically adds the creator as the first employee.
     // • Links the employee profile to the newly created shelter.
-    //
-    // • Rolls back the shelter creation if linking the employee
-    //   profile fails to keep the database consistent.
-    //
-    // • Leaves the shelter in the pending state until it is
-    //   approved by a superadmin.
-    //
+    // • Rolls back shelter creation if profile linking fails.
+    // • Leaves the shelter pending and inactive until approved.
     //============================================================
+
     const {
       name,
       email,
       phone,
-      logo,
-      images,
       description,
       address,
       city,
@@ -125,8 +136,18 @@ class ShelterController {
       socialLinks,
     } = req.body;
 
-    // Important: Prevent duplicate shelter emails.
-    const existingShelter = await Shelter.findOne({ email });
+    // Images cannot be controlled through JSON data.
+    if (req.body.logo !== undefined || req.body.images !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Shelter logo and images must be managed through image upload endpoints",
+      });
+    }
+
+    const existingShelter = await Shelter.findOne({
+      email,
+    });
 
     if (existingShelter) {
       return res.status(409).json({
@@ -135,9 +156,8 @@ class ShelterController {
       });
     }
 
-    let employeeProfile;
+    let employeeProfile = null;
 
-    // Important: Shelter employees can only create one shelter.
     if (req.user.role === "shelterEmployee") {
       employeeProfile = await ShelterEmployeeProfile.findOne({
         userId: req.user._id,
@@ -154,7 +174,7 @@ class ShelterController {
       if (employeeProfile.shelterId) {
         return res.status(409).json({
           success: false,
-          message: "Employee already belongs to another shelter",
+          message: "Employee already belongs to a shelter",
         });
       }
     }
@@ -163,8 +183,6 @@ class ShelterController {
       name,
       email,
       phone,
-      logo,
-      images,
       description,
       address,
       city,
@@ -173,16 +191,27 @@ class ShelterController {
       operatingHours,
       socialLinks,
       createdBy: req.user._id,
+
+      // Explicit default administrative state.
+      verificationStatus: "pending",
+      isVerified: false,
+      isActive: false,
+      rejectionReason: null,
+      verifiedBy: null,
+      verifiedAt: null,
+
+      // Images are managed separately.
+      logo: null,
+      images: [],
     };
 
-    // Important: Add the creator as the first shelter employee.
     if (req.user.role === "shelterEmployee") {
       shelterData.employees = [req.user._id];
     }
 
-    // Important: GeoJSON coordinates must be [longitude, latitude].
     if (longitude !== undefined && latitude !== undefined) {
       shelterData.longitude = Number(longitude);
+
       shelterData.latitude = Number(latitude);
 
       shelterData.location = {
@@ -193,15 +222,14 @@ class ShelterController {
 
     const shelter = await Shelter.create(shelterData);
 
-    // Important: Link the employee profile to the newly created shelter.
     if (employeeProfile) {
       employeeProfile.shelterId = shelter._id;
 
       try {
         await employeeProfile.save();
       } catch (error) {
-        // Important: Roll back the shelter creation if profile linking fails.
         await Shelter.findByIdAndDelete(shelter._id);
+
         throw error;
       }
     }
@@ -217,24 +245,15 @@ class ShelterController {
   // Get Public Shelters
   //============================================================
   getPublicShelters = async (req, res) => {
-    //
-    // • Retrieves only shelters that are approved, verified,
-    //   and currently active.
-    //
-    // • Supports optional filtering by city and supported species.
-    //
-    // • Allows keyword searching across the shelter name,
-    //   description, and address.
-    //
-    // • Returns only public-facing shelter information while
-    //   excluding internal and administrative data.
-    //
-    // • Sorts the results by the most recently created shelters.
-    //
+    // • Retrieves only approved, verified, and active shelters.
+    // • Supports city and species filters.
+    // • Supports keyword searching by name, description,
+    //   and address.
+    // • Returns public-facing shelter information only.
     //============================================================
+
     const { city, species, search } = req.query;
 
-    // Important: Only approved, verified, and active shelters are publicly visible.
     const filter = {
       isVerified: true,
       verificationStatus: "approved",
@@ -252,7 +271,6 @@ class ShelterController {
       filter.supportedSpecies = species;
     }
 
-    // Important: Perform a case-insensitive search across public shelter information.
     if (search) {
       filter.$or = [
         {
@@ -295,7 +313,9 @@ class ShelterController {
           "createdAt",
         ].join(" "),
       )
-      .sort({ createdAt: -1 });
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json({
       success: true,
@@ -306,23 +326,16 @@ class ShelterController {
   };
 
   //============================================================
-  // Get All Shelters (Superadmin)
+  // Get All Shelters
   //============================================================
   getAllShelters = async (req, res) => {
-    //
-    // • Retrieves all shelters regardless of their approval
-    //   or activation status.
-    //
-    // • Supports optional filtering by verification status,
-    //   activation status, and city.
-    //
-    // • Includes information about the user who created
-    //   the shelter and the superadmin who verified it.
-    //
-    // • Returns the results ordered from the newest shelters
-    //   to the oldest.
-    //
+    // • Intended for Super Admin.
+    // • Retrieves shelters regardless of verification
+    //   and activation status.
+    // • Supports verification status, active status,
+    //   and city filters.
     //============================================================
+
     const { verificationStatus, isActive, city } = req.query;
 
     const filter = {};
@@ -345,7 +358,9 @@ class ShelterController {
     const shelters = await Shelter.find(filter)
       .populate("createdBy", "firstName lastName email role")
       .populate("verifiedBy", "firstName lastName email")
-      .sort({ createdAt: -1 });
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json({
       success: true,
@@ -353,36 +368,24 @@ class ShelterController {
       data: shelters,
     });
   };
-
   //============================================================
   // Get Shelter by ID
   //============================================================
   getShelterById = async (req, res) => {
-    //
     // • Retrieves a shelter using its unique ID.
-    //
-    // • Returns different levels of information depending on
-    //   the authenticated user's role and relationship to the shelter.
-    //
-    // • Gives superadmins full access to shelter details,
-    //   including verification data, employees, and animals.
-    //
-    // • Gives shelter employees administrative access only when
-    //   they have an active profile linked to the requested shelter.
-    //
-    // • Treats employees from other shelters as public users.
-    //
-    // • Returns public information only when the shelter is
+    // • Gives Super Admin full access to shelter details.
+    // • Gives Shelter Employees administrative access only
+    //   when they have an active profile linked to the shelter.
+    // • Other users receive public information only.
+    // • Public access is allowed only when the shelter is
     //   approved, verified, and active.
-    //
-    // • Includes only active animals that are currently available
-    //   or pending adoption in the public response.
-    //
     //============================================================
+
     const shelterId = req.params.id;
+
     const currentUser = req.user;
 
-    // Important: Superadmins can access all shelter details.
+    // Super Admin receives full details.
     if (currentUser.role === "superadmin") {
       const shelter = await Shelter.findById(shelterId)
         .populate({
@@ -417,8 +420,9 @@ class ShelterController {
       });
     }
 
-    // Important: Shelter employees receive administrative details only
-    // when their active profile is linked to the requested shelter.
+    // Shelter Employees receive administrative details
+    // only when their active profile is linked
+    // to the requested shelter.
     if (currentUser.role === "shelterEmployee") {
       const employeeProfile = await ShelterEmployeeProfile.findOne({
         userId: currentUser._id,
@@ -461,8 +465,7 @@ class ShelterController {
       }
     }
 
-    // Important: Public access is limited to approved, verified,
-    // and active shelters with publicly available animals only.
+    // Public access.
     const shelter = await Shelter.findOne({
       _id: shelterId,
       verificationStatus: "approved",
@@ -519,28 +522,15 @@ class ShelterController {
   // Update Shelter
   //============================================================
   updateShelter = async (req, res) => {
-    //
-    // • Updates an existing shelter using its unique ID.
-    //
-    // • Allows access only to a superadmin or an authorized
-    //   shelter manager who can manage the requested shelter.
-    //
-    // • Restricts updates to an approved list of editable fields
-    //   to prevent changes to protected administrative data.
-    //
-    // • Updates the GeoJSON location only when both longitude
-    //   and latitude are provided.
-    //
-    // • Keeps the current approval status when the update is
-    //   performed by a superadmin.
-    //
-    // • Resets the shelter to pending verification when an
-    //   authorized shelter employee updates its information.
-    //
-    // • Clears previous verification and rejection data before
-    //   sending the shelter for superadmin approval again.
-    //
+    // • Updates an existing shelter.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Prevents direct updates to logo and images.
+    // • Prevents direct updates to protected administrative fields.
+    // • Shelter Employee updates return the shelter
+    //   to pending verification.
+    // • Super Admin updates preserve the current approval state.
     //============================================================
+
     const shelter = await Shelter.findById(req.params.id);
 
     if (!shelter) {
@@ -550,9 +540,6 @@ class ShelterController {
       });
     }
 
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    // Important: Only a superadmin or an authorized shelter manager can update the shelter.
     const canManageShelter = await checkShelterEmployeePermission({
       user: req.user,
       shelter,
@@ -565,13 +552,43 @@ class ShelterController {
       });
     }
 
-    // Important: Prevent direct updates to protected administrative fields.
+    // Images must be managed through dedicated endpoints.
+    if (req.body.logo !== undefined || req.body.images !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Shelter logo and images must be managed through image endpoints",
+      });
+    }
+
+    // Protected administrative fields cannot be changed directly.
+    const protectedFields = [
+      "createdBy",
+      "verifiedBy",
+      "verifiedAt",
+      "verificationStatus",
+      "isVerified",
+      "isActive",
+      "rejectionReason",
+      "employees",
+      "animalIds",
+    ];
+
+    const hasProtectedField = protectedFields.some(
+      (field) => req.body[field] !== undefined,
+    );
+
+    if (hasProtectedField) {
+      return res.status(400).json({
+        success: false,
+        message: "Protected shelter fields cannot be updated directly",
+      });
+    }
+
     const allowedFields = [
       "name",
       "email",
       "phone",
-      "logo",
-      "images",
       "description",
       "address",
       "city",
@@ -587,23 +604,68 @@ class ShelterController {
       }
     });
 
-    // Important: GeoJSON coordinates must follow [longitude, latitude].
-    if (req.body.longitude !== undefined && req.body.latitude !== undefined) {
-      shelter.longitude = Number(req.body.longitude);
-      shelter.latitude = Number(req.body.latitude);
+    // Coordinates must be provided together.
+    const hasLongitude = req.body.longitude !== undefined;
+
+    const hasLatitude = req.body.latitude !== undefined;
+
+    if (hasLongitude !== hasLatitude) {
+      return res.status(400).json({
+        success: false,
+        message: "Longitude and latitude must be provided together",
+      });
+    }
+
+    if (hasLongitude && hasLatitude) {
+      const longitude = Number(req.body.longitude);
+
+      const latitude = Number(req.body.latitude);
+
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+        return res.status(400).json({
+          success: false,
+          message: "Longitude and latitude must be valid numbers",
+        });
+      }
+
+      if (longitude < -180 || longitude > 180) {
+        return res.status(400).json({
+          success: false,
+          message: "Longitude must be between -180 and 180",
+        });
+      }
+
+      if (latitude < -90 || latitude > 90) {
+        return res.status(400).json({
+          success: false,
+          message: "Latitude must be between -90 and 90",
+        });
+      }
+
+      shelter.longitude = longitude;
+
+      shelter.latitude = latitude;
 
       shelter.location = {
         type: "Point",
-        coordinates: [Number(req.body.longitude), Number(req.body.latitude)],
+        coordinates: [longitude, latitude],
       };
     }
 
-    // Important: Employee updates require the shelter to be reviewed again.
+    const isSuperAdmin = req.user.role === "superadmin";
+
+    // Employee updates require review again.
     if (!isSuperAdmin) {
       shelter.verificationStatus = "pending";
+
       shelter.isVerified = false;
+
+      shelter.isActive = false;
+
       shelter.verifiedBy = null;
+
       shelter.verifiedAt = null;
+
       shelter.rejectionReason = null;
     }
 
@@ -622,24 +684,12 @@ class ShelterController {
   // Approve Shelter
   //============================================================
   approveShelter = async (req, res) => {
-    //
-    // • Approves a shelter after it has been reviewed by
-    //   a superadmin.
-    //
-    // • Prevents approving a shelter that is already verified
-    //   and marked as approved.
-    //
-    // • Updates the verification status and marks the shelter
-    //   as officially verified.
-    //
-    // • Activates the shelter immediately after approval.
-    //
-    // • Clears any previous rejection reason.
-    //
-    // • Records the superadmin who approved the shelter
-    //   and the exact approval date.
-    //
+    // • Approves and activates the shelter.
+    // • Prevents approving an already approved shelter.
+    // • Clears previous rejection details.
+    // • Records the Super Admin and approval date.
     //============================================================
+
     const shelter = await Shelter.findById(req.params.id);
 
     if (!shelter) {
@@ -649,16 +699,18 @@ class ShelterController {
       });
     }
 
-    // Important: Prevent approving an already approved shelter.
-    if (shelter.verificationStatus === "approved" && shelter.isVerified) {
+    if (
+      shelter.verificationStatus === "approved" &&
+      shelter.isVerified === true
+    ) {
       return res.status(400).json({
         success: false,
         message: "Shelter is already approved",
       });
     }
 
-    // Important: Approval also activates the shelter and records verification details.
     shelter.verificationStatus = "approved";
+
     shelter.isVerified = true;
     shelter.isActive = true;
     shelter.rejectionReason = null;
@@ -678,26 +730,14 @@ class ShelterController {
   // Reject Shelter
   //============================================================
   rejectShelter = async (req, res) => {
-    //
-    // • Rejects a shelter after review by a superadmin.
-    //
-    // • Requires a rejection reason before the request
-    //   can be completed.
-    //
-    // • Marks the shelter as rejected and removes its
-    //   verified status.
-    //
-    // • Deactivates the shelter to prevent public access.
-    //
-    // • Stores the rejection reason together with the
-    //   superadmin who performed the review and the
-    //   review date.
-    //
+    // • Rejects and deactivates the shelter.
+    // • Requires a rejection reason.
+    // • Records the Super Admin and review date.
     //============================================================
+
     const { reason } = req.body;
 
-    // Important: A rejection reason is required for review history.
-    if (!reason || !reason.trim()) {
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
       return res.status(400).json({
         success: false,
         message: "Rejection reason is required",
@@ -713,12 +753,16 @@ class ShelterController {
       });
     }
 
-    // Important: Rejected shelters are automatically deactivated.
     shelter.verificationStatus = "rejected";
+
     shelter.isVerified = false;
+
     shelter.isActive = false;
+
     shelter.rejectionReason = reason.trim();
+
     shelter.verifiedBy = req.user._id;
+
     shelter.verifiedAt = new Date();
 
     await shelter.save();
@@ -734,18 +778,9 @@ class ShelterController {
   // Toggle Shelter Status
   //============================================================
   toggleShelterStatus = async (req, res) => {
-    //
     // • Activates or deactivates a shelter.
-    //
-    // • Allows activation only when the shelter has already
-    //   been approved and verified.
-    //
-    // • Prevents rejected or pending shelters from becoming
-    //   publicly active.
-    //
-    // • Preserves all shelter information while changing only
-    //   its activation status.
-    //
+    // • Allows activation only when approved and verified.
+    // • Deactivation does not remove employees or images.
     //============================================================
 
     const shelter = await Shelter.findById(req.params.id);
@@ -757,17 +792,18 @@ class ShelterController {
       });
     }
 
-    // Important: Determine whether the current action is an activation request.
     const isTryingToActivate = !shelter.isActive;
 
-    // Important: Only approved and verified shelters can be activated.
     if (
       isTryingToActivate &&
-      (!shelter.isVerified || shelter.verificationStatus !== "approved")
+      !this.isShelterAvailable({
+        ...shelter.toObject(),
+        isActive: true,
+      })
     ) {
       return res.status(400).json({
         success: false,
-        message: "Shelter must be approved before activation",
+        message: "Shelter must be approved and verified before activation",
       });
     }
 
@@ -783,32 +819,25 @@ class ShelterController {
       data: shelter,
     });
   };
-
   //============================================================
   // Permanently Delete Shelter
   //============================================================
   permanentlyDeleteShelter = async (req, res) => {
-    //
-    // • Permanently removes a shelter from the system.
-    //
-    // • Allows deletion only after the shelter has been
-    //   deactivated.
-    //
-    // • Prevents deletion while there are active adoption
-    //   requests associated with the shelter.
-    //
-    // • Removes all relationships between the shelter and
-    //   its employees and veterinarians.
-    //
-    // • Deletes cancelled adoption requests before removing
-    //   the shelter's animals.
-    //
-    // • Deletes all animals that belong to the shelter.
-    //
-    // • Removes the shelter only after all related data has
-    //   been cleaned to preserve database consistency.
-    //
+    // • Permanently removes an inactive shelter.
+    // • Prevents deletion while active adoption requests exist.
+    // • Collects the shelter and animal image public IDs
+    //   before deleting database records.
+    // • Removes employee and veterinarian relationships.
+    // • Deletes completed, rejected, and cancelled adoption
+    //   requests related to the shelter.
+    // • Deletes all animals belonging to the shelter.
+    // • Deletes the shelter document after cleaning relations.
+    // • Attempts to remove Cloudinary files after the database
+    //   deletion succeeds.
+    // • Cloudinary cleanup failure does not make the completed
+    //   database deletion fail.
     //============================================================
+
     const shelter = await Shelter.findById(req.params.id);
 
     if (!shelter) {
@@ -818,7 +847,7 @@ class ShelterController {
       });
     }
 
-    // Important: A shelter must be deactivated before it can be permanently deleted.
+    // The shelter must be inactive before permanent deletion.
     if (shelter.isActive) {
       return res.status(400).json({
         success: false,
@@ -826,7 +855,7 @@ class ShelterController {
       });
     }
 
-    // Important: Prevent deletion while active adoption requests still exist.
+    // Active adoption requests prevent permanent deletion.
     const activeAdoptionRequestsCount = await AdoptionRequest.countDocuments({
       shelterId: shelter._id,
       status: {
@@ -838,12 +867,45 @@ class ShelterController {
       return res.status(409).json({
         success: false,
         message:
-          "All adoption requests must be cancelled before permanently deleting the shelter",
+          "All active adoption requests must be completed, rejected, or cancelled before permanently deleting the shelter",
         activeAdoptionRequestsCount,
       });
     }
 
-    // Important: Remove employee references to the shelter.
+    // Retrieve animals before deleting them
+    // so their Cloudinary public IDs can be collected.
+    const shelterAnimals = await Animal.find({
+      shelterId: shelter._id,
+    }).select("images");
+
+    const cloudinaryPublicIds = [];
+
+    // Collect the shelter logo public ID.
+    if (shelter.logo?.publicId) {
+      cloudinaryPublicIds.push(shelter.logo.publicId);
+    }
+
+    // Collect shelter gallery image public IDs.
+    if (Array.isArray(shelter.images)) {
+      shelter.images.forEach((image) => {
+        if (image?.publicId) {
+          cloudinaryPublicIds.push(image.publicId);
+        }
+      });
+    }
+
+    // Collect animal image public IDs.
+    shelterAnimals.forEach((animal) => {
+      if (Array.isArray(animal.images)) {
+        animal.images.forEach((image) => {
+          if (image?.publicId) {
+            cloudinaryPublicIds.push(image.publicId);
+          }
+        });
+      }
+    });
+
+    // Remove the shelter relationship from employee profiles.
     await ShelterEmployeeProfile.updateMany(
       {
         shelterId: shelter._id,
@@ -861,7 +923,7 @@ class ShelterController {
       },
     );
 
-    // Important: Remove veterinarian references to the shelter.
+    // Remove the shelter relationship from veterinarian profiles.
     await VetProfile.updateMany(
       {
         shelterId: shelter._id,
@@ -873,19 +935,31 @@ class ShelterController {
       },
     );
 
-    // Important: Cancelled adoption requests must be deleted before removing the shelter's animals.
+    // All remaining requests are now terminal
+    // because active requests were checked above.
     const deletedAdoptionRequests = await AdoptionRequest.deleteMany({
       shelterId: shelter._id,
-      status: "cancelled",
     });
 
-    // Important: Delete all animals that belong to the shelter.
+    // Delete all animals belonging to the shelter.
     const deletedAnimals = await Animal.deleteMany({
       shelterId: shelter._id,
     });
 
-    // Important: Delete the shelter after cleaning all related data.
+    // Delete the shelter after related database data is cleaned.
     await shelter.deleteOne();
+
+    // Remove Cloudinary files after database deletion succeeds.
+    if (cloudinaryPublicIds.length > 0) {
+      try {
+        await deleteImages([...new Set(cloudinaryPublicIds)]);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete some shelter Cloudinary files:",
+          cloudinaryError.message,
+        );
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -893,6 +967,7 @@ class ShelterController {
       deletedData: {
         animals: deletedAnimals.deletedCount,
         adoptionRequests: deletedAdoptionRequests.deletedCount,
+        cloudinaryFilesRequested: [...new Set(cloudinaryPublicIds)].length,
       },
     });
   };
@@ -901,32 +976,17 @@ class ShelterController {
   // Add Employee to Shelter
   //============================================================
   addEmployee = async (req, res) => {
-    //
-    // • Adds a shelter employee or veterinarian to an
-    //   existing shelter.
-    //
-    // • Allows this action only for a superadmin or an
-    //   authorized shelter manager.
-    //
+    // • Adds a Shelter Employee or Veterinarian to a shelter.
+    // • Allows Super Admin or an authorized active Manager.
     // • Requires the shelter to be approved, verified,
-    //   and active before accepting new employees.
-    //
-    // • Ensures that the selected user exists, is active,
-    //   and has an allowed role.
-    //
-    // • Requires the user to have an active profile that
-    //   matches their assigned role.
-    //
-    // • Prevents assigning a user who already belongs to
-    //   another shelter.
-    //
-    // • Prevents adding the same employee to the shelter
-    //   more than once.
-    //
-    // • Updates both the shelter employee list and the
-    //   related employee profile.
-    //
+    //   and active.
+    // • Requires the selected user to be active.
+    // • Requires an active profile matching the user's role.
+    // • Prevents assigning a user to more than one shelter.
+    // • Prevents duplicate membership.
+    // • Updates both the shelter and the related profile.
     //============================================================
+
     const { employeeId } = req.body;
 
     if (!employeeId) {
@@ -945,7 +1005,6 @@ class ShelterController {
       });
     }
 
-    // Important: Only authorized shelter managers or superadmins can manage employees.
     const canManageEmployees = await checkShelterEmployeePermission({
       user: req.user,
       shelter,
@@ -958,12 +1017,7 @@ class ShelterController {
       });
     }
 
-    // Important: Employees can only join approved, verified, and active shelters.
-    if (
-      !shelter.isVerified ||
-      shelter.verificationStatus !== "approved" ||
-      !shelter.isActive
-    ) {
+    if (!this.isShelterAvailable(shelter)) {
       return res.status(403).json({
         success: false,
         message:
@@ -987,7 +1041,6 @@ class ShelterController {
       });
     }
 
-    // Important: Only shelter employees and veterinarians can be assigned.
     if (!["shelterEmployee", "vet"].includes(employee.role)) {
       return res.status(400).json({
         success: false,
@@ -995,7 +1048,18 @@ class ShelterController {
       });
     }
 
-    let employeeProfile;
+    const employeeExists = shelter.employees.some(
+      (id) => String(id) === String(employee._id),
+    );
+
+    if (employeeExists) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee already belongs to this shelter",
+      });
+    }
+
+    let employeeProfile = null;
 
     if (employee.role === "shelterEmployee") {
       employeeProfile = await ShelterEmployeeProfile.findOne({
@@ -1021,7 +1085,6 @@ class ShelterController {
       });
     }
 
-    // Important: A user cannot belong to more than one shelter.
     if (
       employeeProfile.shelterId &&
       String(employeeProfile.shelterId) !== String(shelter._id)
@@ -1032,21 +1095,11 @@ class ShelterController {
       });
     }
 
-    const employeeExists = shelter.employees.some(
-      (id) => String(id) === String(employee._id),
-    );
-
-    if (employeeExists) {
-      return res.status(409).json({
-        success: false,
-        message: "Employee already belongs to this shelter",
-      });
-    }
-
     shelter.employees.push(employee._id);
+
     employeeProfile.shelterId = shelter._id;
 
-    // Important: Update both records together to keep the relationship consistent.
+    // Both documents are saved together.
     await Promise.all([shelter.save(), employeeProfile.save()]);
 
     const updatedShelter = await Shelter.findById(shelter._id).populate(
@@ -1065,30 +1118,15 @@ class ShelterController {
   // Remove Employee from Shelter
   //============================================================
   removeEmployee = async (req, res) => {
-    //
-    // • Removes a shelter employee or veterinarian from an
-    //   existing shelter.
-    //
-    // • Allows this action only for a superadmin or an
-    //   authorized shelter manager.
-    //
-    // • Prevents a shelter manager from removing themselves.
-    //
-    // • Ensures that the selected user exists and has a
-    //   related employee or veterinarian profile.
-    //
-    // • Verifies that the user is currently assigned to the
-    //   requested shelter before removing them.
-    //
+    // • Removes a Shelter Employee or Veterinarian.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Prevents a Manager from removing themselves.
+    // • Ensures the user belongs to the requested shelter.
     // • Removes the user from the shelter employee list.
-    //
-    // • Clears the shelter reference from the related profile
-    //   when it points to the same shelter.
-    //
-    // • Updates both the shelter and the employee profile to
-    //   keep the relationship consistent.
-    //
+    // • Clears the shelter relationship from the user's profile.
+    // • Resets Shelter Employee job information when removed.
     //============================================================
+
     const { employeeId } = req.params;
 
     const shelter = await Shelter.findById(req.params.id);
@@ -1100,7 +1138,6 @@ class ShelterController {
       });
     }
 
-    // Important: Only authorized shelter managers or superadmins can manage employees.
     const canManageEmployees = await checkShelterEmployeePermission({
       user: req.user,
       shelter,
@@ -1113,7 +1150,6 @@ class ShelterController {
       });
     }
 
-    // Important: A shelter manager cannot remove themselves.
     if (
       req.user.role === "shelterEmployee" &&
       String(req.user._id) === String(employeeId)
@@ -1121,6 +1157,17 @@ class ShelterController {
       return res.status(400).json({
         success: false,
         message: "You cannot remove yourself from the shelter",
+      });
+    }
+
+    const employeeExists = shelter.employees.some(
+      (id) => String(id) === String(employeeId),
+    );
+
+    if (!employeeExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found in this shelter",
       });
     }
 
@@ -1133,7 +1180,7 @@ class ShelterController {
       });
     }
 
-    let employeeProfile;
+    let employeeProfile = null;
 
     if (employee.role === "shelterEmployee") {
       employeeProfile = await ShelterEmployeeProfile.findOne({
@@ -1154,14 +1201,13 @@ class ShelterController {
       });
     }
 
-    const employeeExists = shelter.employees.some(
-      (id) => String(id) === String(employeeId),
-    );
-
-    if (!employeeExists) {
-      return res.status(404).json({
+    if (
+      !employeeProfile.shelterId ||
+      String(employeeProfile.shelterId) !== String(shelter._id)
+    ) {
+      return res.status(409).json({
         success: false,
-        message: "Employee not found in this shelter",
+        message: "Employee profile is not linked to this shelter",
       });
     }
 
@@ -1169,15 +1215,17 @@ class ShelterController {
       (id) => String(id) !== String(employeeId),
     );
 
-    // Important: Clear the profile relationship only when it belongs to this shelter.
-    if (
-      employeeProfile.shelterId &&
-      String(employeeProfile.shelterId) === String(shelter._id)
-    ) {
-      employeeProfile.shelterId = null;
+    employeeProfile.shelterId = null;
+
+    // Reset Shelter Employee job data after removal.
+    if (employee.role === "shelterEmployee") {
+      employeeProfile.position = "Employee";
+
+      employeeProfile.employeeNumber = null;
+
+      employeeProfile.hireDate = null;
     }
 
-    // Important: Update both records together to keep the relationship consistent.
     await Promise.all([shelter.save(), employeeProfile.save()]);
 
     const updatedShelter = await Shelter.findById(shelter._id).populate(
@@ -1196,30 +1244,19 @@ class ShelterController {
   // Get Nearest Shelters
   //============================================================
   getNearestShelters = async (req, res) => {
-    //
-    // • Finds the nearest shelters based on the user's
-    //   longitude, latitude, and maximum search distance.
-    //
-    // • Requires all location parameters and ensures they
-    //   contain valid numeric values.
-    //
-    // • Validates longitude and latitude against their
-    //   accepted geographic ranges.
-    //
-    // • Rejects zero or negative search distances.
-    //
-    // • Returns only shelters that are approved, verified,
-    //   and currently active.
-    //
-    // • Calculates the distance from the provided location
-    //   in both meters and kilometers.
-    //
-    // • Sorts the shelters from the nearest to the farthest.
-    //
+    // • Finds nearby shelters using longitude and latitude.
+    // • Requires valid numeric coordinates.
+    // • Requires distance in meters.
+    // • Prevents unlimited or excessively large searches.
+    // • Returns approved, verified, and active shelters only.
+    // • Calculates distance in meters and kilometers.
     //============================================================
+
     const { lng, lat, distance } = req.query;
 
-    if (!lng || !lat || !distance) {
+    const MAX_SEARCH_DISTANCE = 100000;
+
+    if (lng === undefined || lat === undefined || distance === undefined) {
       return res.status(400).json({
         success: false,
         message: "lng, lat and distance are required",
@@ -1227,10 +1264,11 @@ class ShelterController {
     }
 
     const longitude = Number(lng);
+
     const latitude = Number(lat);
+
     const searchDistance = Number(distance);
 
-    // Important: Location parameters must contain valid numeric values.
     if (
       !Number.isFinite(longitude) ||
       !Number.isFinite(latitude) ||
@@ -1242,7 +1280,6 @@ class ShelterController {
       });
     }
 
-    // Important: Coordinates must remain within valid geographic ranges.
     if (longitude < -180 || longitude > 180) {
       return res.status(400).json({
         success: false,
@@ -1264,7 +1301,13 @@ class ShelterController {
       });
     }
 
-    // Important: GeoJSON coordinates must follow [longitude, latitude].
+    if (searchDistance > MAX_SEARCH_DISTANCE) {
+      return res.status(400).json({
+        success: false,
+        message: `Distance cannot exceed ${MAX_SEARCH_DISTANCE} meters`,
+      });
+    }
+
     const shelters = await Shelter.aggregate([
       {
         $geoNear: {
@@ -1288,10 +1331,13 @@ class ShelterController {
           _id: 1,
           name: 1,
           logo: 1,
+          images: 1,
           address: 1,
           city: 1,
           phone: 1,
           supportedSpecies: 1,
+          operatingHours: 1,
+          location: 1,
 
           distanceInMeters: {
             $round: ["$distanceInMeters", 0],
@@ -1324,5 +1370,426 @@ class ShelterController {
       data: shelters,
     });
   };
+  //============================================================
+  // Upload Shelter Logo
+  //============================================================
+  uploadLogo = async (req, res) => {
+    // • Uploads the first logo for the shelter.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Prevents uploading another logo when one already exists.
+    // • Requires one uploaded image file.
+    // • Uploads the file to Cloudinary before saving its
+    //   information in MongoDB.
+    // • Removes the newly uploaded Cloudinary file if
+    //   saving the shelter fails.
+    //============================================================
+
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const canManageShelter = await checkShelterEmployeePermission({
+      user: req.user,
+      shelter,
+    });
+
+    if (!canManageShelter) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this shelter",
+      });
+    }
+
+    if (shelter.logo) {
+      return res.status(400).json({
+        success: false,
+        message: "Shelter logo already exists. Use the replace logo endpoint",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Logo image is required",
+      });
+    }
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "shelter",
+      originalName: req.file.originalname,
+    });
+
+    try {
+      shelter.logo = this.buildUploadedImage(uploaded);
+
+      await shelter.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Shelter logo uploaded successfully",
+        data: shelter,
+      });
+    } catch (error) {
+      try {
+        await deleteImage(uploaded.public_id);
+      } catch (cleanupError) {
+        console.error(
+          "Failed to clean uploaded shelter logo:",
+          cleanupError.message,
+        );
+      }
+
+      throw error;
+    }
+  };
+
+  //============================================================
+  // Replace Shelter Logo
+  //============================================================
+  replaceLogo = async (req, res) => {
+    // • Replaces the current shelter logo.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Requires a new uploaded image.
+    // • Uploads and saves the new logo before deleting
+    //   the previous Cloudinary file.
+    // • Removes the newly uploaded file if saving fails.
+    // • Failure to delete the old Cloudinary logo does not
+    //   undo the successfully saved new logo.
+    //============================================================
+
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const canManageShelter = await checkShelterEmployeePermission({
+      user: req.user,
+      shelter,
+    });
+
+    if (!canManageShelter) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this shelter",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Logo image is required",
+      });
+    }
+
+    const oldLogo = shelter.logo;
+
+    const uploaded = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "shelter",
+      originalName: req.file.originalname,
+    });
+
+    try {
+      shelter.logo = this.buildUploadedImage(uploaded);
+
+      await shelter.save();
+    } catch (error) {
+      try {
+        await deleteImage(uploaded.public_id);
+      } catch (cleanupError) {
+        console.error(
+          "Failed to clean newly uploaded shelter logo:",
+          cleanupError.message,
+        );
+      }
+
+      throw error;
+    }
+
+    // Delete the old Cloudinary file only after
+    // the new logo has been saved successfully.
+    if (oldLogo?.publicId) {
+      try {
+        await deleteImage(oldLogo.publicId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete old shelter logo:",
+          cloudinaryError.message,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Shelter logo replaced successfully",
+      data: shelter,
+    });
+  };
+
+  //============================================================
+  // Delete Shelter Logo
+  //============================================================
+  deleteLogo = async (req, res) => {
+    // • Removes the shelter logo.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Removes the logo reference from MongoDB first.
+    // • Attempts to delete the Cloudinary file after
+    //   the database update succeeds.
+    // • Cloudinary deletion failure does not restore the
+    //   removed database reference.
+    //============================================================
+
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const canManageShelter = await checkShelterEmployeePermission({
+      user: req.user,
+      shelter,
+    });
+
+    if (!canManageShelter) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this shelter",
+      });
+    }
+
+    if (!shelter.logo) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter logo not found",
+      });
+    }
+
+    const logoToDelete = shelter.logo;
+
+    // Remove the MongoDB reference first.
+    shelter.logo = null;
+
+    await shelter.save();
+
+    // Delete the Cloudinary file after saving MongoDB.
+    if (logoToDelete.publicId) {
+      try {
+        await deleteImage(logoToDelete.publicId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete shelter logo from Cloudinary:",
+          cloudinaryError.message,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Shelter logo deleted successfully",
+      data: shelter,
+    });
+  };
+
+  //============================================================
+  // Add Shelter Images
+  //============================================================
+  addShelterImages = async (req, res) => {
+    // • Adds one or more gallery images to the shelter.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Requires at least one uploaded image.
+    // • Prevents exceeding the maximum gallery image count.
+    // • Saves each image URL and Cloudinary public ID.
+    // • Removes all newly uploaded Cloudinary files if
+    //   uploading or saving fails.
+    //============================================================
+
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const canManageShelter = await checkShelterEmployeePermission({
+      user: req.user,
+      shelter,
+    });
+
+    if (!canManageShelter) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this shelter",
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one shelter image is required",
+      });
+    }
+
+    const currentImagesCount = shelter.images?.length || 0;
+
+    const requestedImagesCount = req.files.length;
+
+    if (currentImagesCount + requestedImagesCount > MAX_SHELTER_IMAGES) {
+      return res.status(400).json({
+        success: false,
+        message: `Shelter cannot have more than ${MAX_SHELTER_IMAGES} gallery images`,
+      });
+    }
+
+    const uploadedImages = [];
+
+    try {
+      for (const file of req.files) {
+        const uploaded = await uploadBufferToCloudinary({
+          buffer: file.buffer,
+          folder: "shelter",
+          originalName: file.originalname,
+        });
+
+        uploadedImages.push(this.buildUploadedImage(uploaded));
+      }
+
+      if (!Array.isArray(shelter.images)) {
+        shelter.images = [];
+      }
+
+      shelter.images.push(...uploadedImages);
+
+      await shelter.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Shelter images added successfully",
+        data: shelter,
+      });
+    } catch (error) {
+      if (uploadedImages.length > 0) {
+        try {
+          await deleteImages(uploadedImages.map((image) => image.publicId));
+        } catch (cleanupError) {
+          console.error(
+            "Failed to clean uploaded shelter images:",
+            cleanupError.message,
+          );
+        }
+      }
+
+      throw error;
+    }
+  };
+
+  //============================================================
+  // Delete Shelter Image
+  //============================================================
+  deleteShelterImage = async (req, res) => {
+    // • Deletes one shelter gallery image.
+    // • Allows Super Admin or an authorized active Manager.
+    // • Receives the Cloudinary public ID through req.body.
+    // • Prevents deleting the last remaining gallery image.
+    // • Removes the MongoDB image reference first.
+    // • Deletes the Cloudinary file only after MongoDB
+    //   has been saved successfully.
+    //============================================================
+
+    const shelter = await Shelter.findById(req.params.id);
+
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
+    }
+
+    const canManageShelter = await checkShelterEmployeePermission({
+      user: req.user,
+      shelter,
+    });
+
+    if (!canManageShelter) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this shelter",
+      });
+    }
+
+    const { publicId } = req.body;
+
+    if (!publicId || typeof publicId !== "string" || !publicId.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Image public ID is required",
+      });
+    }
+
+    if (!Array.isArray(shelter.images) || shelter.images.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter has no gallery images",
+      });
+    }
+
+    if (shelter.images.length <= 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Shelter must have at least one gallery image",
+      });
+    }
+
+    const imageIndex = shelter.images.findIndex(
+      (image) => String(image.publicId) === String(publicId.trim()),
+    );
+
+    if (imageIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter image not found",
+      });
+    }
+
+    const imageToDelete = shelter.images[imageIndex];
+
+    // Remove the MongoDB reference first.
+    shelter.images.splice(imageIndex, 1);
+
+    await shelter.save();
+
+    // Delete the Cloudinary file after MongoDB succeeds.
+    if (imageToDelete.publicId) {
+      try {
+        await deleteImage(imageToDelete.publicId);
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete shelter image from Cloudinary:",
+          cloudinaryError.message,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Shelter image deleted successfully",
+      data: shelter,
+    });
+  };
 }
+
 module.exports = new ShelterController();
