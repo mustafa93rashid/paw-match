@@ -7,6 +7,10 @@ const passwordService = require("../utils/passwordService");
 
 const {uploadBufferToCloudinary,deleteImage} = require("../services/cloudinary.service");
 
+const SignupVerification = require("../models/SignupVerification"); 
+const emailService = require("../services/email.service"); 
+const verificationCodeService = require("../utils/verificationCodeService"); 
+const { getIo, getSocketId } = require("../utils/socket"); 
 // ==================================================
 // Allowed user roles
 // ==================================================
@@ -438,6 +442,112 @@ class UserController {
       success: true,
       message: "Profile retrieved successfully",
       data: user,
+    });
+  };
+// ==================================================
+  // Request Email Update (Enhanced & Secure)
+  // ==================================================
+  requestEmailUpdate = async (req, res) => {
+    const { newEmail } = req.body;
+    const currentUserId = this.getCurrentUserId(req);
+
+    // 1. التحقق من أن الإيميل الجديد غير مستخدم من قبل أي مستخدم آخر في النظام
+    const emailExists = await User.findOne({ email: newEmail });
+    if (emailExists) {
+      return res.status(409).json({
+        success: false,
+        message: "هذا البريد الإلكتروني مستخدم بالفعل لحساب آخر",
+      });
+    }
+
+    // 2. حذف أي أكواد تحقق قديمة معلقة لهذا المستخدم لنفس الغرض
+    await SignupVerification.deleteMany({
+      userId: currentUserId,
+      purpose: "update_email",
+    });
+
+    // 3. توليد كود تحقق جديد
+    const code = await verificationCodeService.generateCode();
+
+    // 4. حفظ الكود في قاعدة البيانات مع انتهاء صلاحية (10 دقائق)
+    const verificationRecord = await SignupVerification.create({
+      email: newEmail,
+      code: code,
+      purpose: "update_email",
+      userId: currentUserId,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    // 5. محاولة إرسال الإيميل (مع التراجع وحذف الكود في حال فشل الإرسال)
+    try {
+      await emailService.sendVerificationCode(newEmail, code);
+    } catch (error) {
+      await SignupVerification.findByIdAndDelete(verificationRecord._id);
+      console.error("Failed to send verification email:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: "حدث خطأ أثناء إرسال البريد الإلكتروني. الرجاء المحاولة لاحقاً.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "تم إرسال كود التحقق بنجاح إلى بريدك الإلكتروني الجديد",
+    });
+  };
+
+  // ==================================================
+  // Verify Email Update (Enhanced & Secure)
+  // ==================================================
+  verifyEmailUpdate = async (req, res) => {
+    const { newEmail, code } = req.body;
+    const currentUserId = this.getCurrentUserId(req);
+
+    // 1. البحث عن كود التحقق ومطابقته
+    const verification = await SignupVerification.findOne({
+      email: newEmail,
+      code: code,
+      purpose: "update_email",
+      userId: currentUserId,
+    });
+
+    if (!verification) {
+      return res.status(400).json({
+        success: false,
+        message: "كود التحقق غير صحيح أو منتهي الصلاحية",
+      });
+    }
+
+    // 2. تحديث الإيميل في حساب المستخدم
+    const user = await User.findById(currentUserId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+    }
+
+    user.email = newEmail;
+    await user.save();
+
+    // 3. تنظيف وحذف كود التحقق من قاعدة البيانات بعد نجاح العملية
+    await SignupVerification.deleteOne({ _id: verification._id });
+
+    // 4. إرسال الإشعار اللحظي عبر Socket.io (إن وجد اتصال نشط)
+    try {
+      const targetSocketId = getSocketId(currentUserId.toString());
+      if (targetSocketId) {
+        getIo().to(targetSocketId).emit("notification", {
+          message: "تم تغيير البريد الإلكتروني الخاص بك بنجاح",
+          type: "success",
+        });
+      }
+    } catch (socketError) {
+      // لا نجعل فشل الإشعار اللحظي يوقف نجاح العملية الرئيسية
+      console.error("Socket emission failed:", socketError.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "تم تحديث البريد الإلكتروني بنجاح",
+      data: sanitizeUser(user),
     });
   };
 

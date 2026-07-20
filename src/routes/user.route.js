@@ -7,6 +7,9 @@ const role = require("../middlewares/role");
 const auth = require("../middlewares/auth");
 const { uploadSingle } = require("../middlewares/upload.middleware");
 
+const { requestEmailValidation, verifyEmailValidation } = require("../Validation/emailUpdate.validate");
+const { emailUpdateLimiter } = require("../middlewares/limiter");
+
 const {updateProfileValidation,updateUserRoleValidation, updateStatusValidation, createUserByAdminValidation} = require("../validation/userManagement.validate");
 
 // Get current user profile
@@ -38,5 +41,9 @@ router.patch("/profile/image/replace",[auth, uploadSingle("image")],asyncHandler
 
 // Delete profile image
 router.delete("/profile/image",[auth],asyncHandler(userController.deleteProfileImage));
+
+// Email update routes
+router.post("/request-email-update",[auth, emailUpdateLimiter, requestEmailValidation],asyncHandler(userController.requestEmailUpdate));
+router.post("/verify-email-update",[auth, verifyEmailValidation],asyncHandler(userController.verifyEmailUpdate));
 
 module.exports = router;

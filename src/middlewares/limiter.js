@@ -28,8 +28,23 @@ const verifySignupLimiter = rateLimit({
   },
 });
 
+
+
+// السماح بـ 3 محاولات فقط كل 15 دقيقة لكل عنوان IP
+const emailUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 دقيقة
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "لقد تجاوزت الحد المسموح به من المحاولات. الرجاء المحاولة مرة أخرى بعد 15 دقيقة.",
+  },
+});
+
 module.exports = {
   signupLimiter,
   signinLimiter,
   verifySignupLimiter,
+  emailUpdateLimiter,
 };
