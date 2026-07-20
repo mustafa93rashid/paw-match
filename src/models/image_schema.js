@@ -6,11 +6,13 @@ const imageSchema = new mongoose.Schema(
       type: String,
       required: true,
       default: null,
+      trim: true,
     },
     publicId: {
       type: String,
       required: true,
       default: null,
+      trim: true,
     },
     isPrimary: {
       type: Boolean,

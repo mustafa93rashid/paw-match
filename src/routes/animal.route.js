@@ -23,12 +23,14 @@ router.post(
   asyncHandler(animalController.createAnimal)
 );
 
+// Add animal images
 router.post(
   "/:id/images",
   [auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 8)],
   asyncHandler(animalController.addAnimalImages),
 );
 
+// Delete animal image by publicId
 router.delete(
   "/:id/images/:imageId",
   [auth, role(["shelterEmployee", "superadmin"])],
@@ -66,6 +68,7 @@ router.delete("/:id", [auth, role(["shelterEmployee", "superadmin"]), animalVali
 
 // Restore animal
 router.patch("/:id/restore", [auth, role(["shelterEmployee", "superadmin"]), animalValidation.restoreAnimalValidation], asyncHandler(animalController.restoreAnimal));
+
 
 
 module.exports = router;

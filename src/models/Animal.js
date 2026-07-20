@@ -87,18 +87,18 @@ const animalSchema = new mongoose.Schema(
       maxlength: [1000, "Description must not exceed 1000 characters"],
       default: null,
     },
-  
-  images: {
-    type: [imageSchema],
-    default: [],
-    // validate: {
-    //     validator(images) {
-    //         return Array.isArray(images) && images.length > 0;
-    //       },
-    //       message: "At least one animal image is required",
-    // },
-  },
-    adoptionStatus: {
+
+    images: {
+      type: [imageSchema],
+      default: [],
+      // validate: {
+      //     validator(images) {
+      //         return Array.isArray(images) && images.length > 0;
+      //       },
+      //       message: "At least one animal image is required",
+      // },
+    },
+      adoptionStatus: {
       type: String,
       enum: {
         values: ["available", "pending", "adopted", "unavailable"],
@@ -155,7 +155,7 @@ const animalSchema = new mongoose.Schema(
         default: "any",
       },
 
-      isAllergic: {
+      hypoallergenic: {
         type: Boolean,
         default: false,
       },

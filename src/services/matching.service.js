@@ -1,108 +1,220 @@
-const AdopterProfile = require("../models/AdopterProfile");
-const Notification = require("../models/Notification");
-const Shelter = require("../models/Shelter");
-const { getIo, getSocketId } = require("../utils/socket"); // استيراد الـ WebSocket
+/*
+|--------------------------------------------------------------------------
+| Matching Configuration
+|--------------------------------------------------------------------------
+*/
 
-
-const calculateMatchScore = (adopter, animal, shelter) => {
-  if (!adopter || !animal || !animal.requirements || !shelter) return 0;
-
-  // 🛑 الفلترة الإلزامية المزدوجة
-  const adopterSpecies = adopter.preferences?.species || adopter.species; 
-  if (animal.species !== adopterSpecies || shelter.city !== adopter.city) {
-    return 0;
-  }
-
-  let totalScore = 0;
-
-  // 1. Home Type Matching (Weight: 20)
-  if (animal.requirements.homeType === 'any' || 
-      animal.requirements.homeType === adopter.homeType) {
-    totalScore += 20;
-  }
-
-  // 2. Experience Level Matching (Weight: 20)
-  if (animal.requirements.experienceLevel === 'any' || 
-      animal.requirements.experienceLevel === adopter.experienceLevel) {
-    totalScore += 20;
-  }
-
-  // 3. Daily Activity Level (Weight: 20)
-  if (animal.requirements.dailyActivityLevel === adopter.dailyActivityLevel) {
-    totalScore += 20;
-  }
-
-  // 4. Owner Type (Weight: 20)
-  if (animal.requirements.ownerType === 'any' || 
-      animal.requirements.ownerType === adopter.ownerType) {
-    totalScore += 20;
-  }
-
-  // 5. Lifestyle Compatibility (Weight: 20)
-  let subPoints = 0;
-  
-  if (adopter.hasKids === true && animal.requirements.suitableForKids === true) {
-    subPoints += 7;
-  } else if (adopter.hasKids === false) { 
-    subPoints += 7; 
-  }
-
-  if (adopter.isAllergic === false || animal.requirements.isAllergic === false) {
-    subPoints += 7;
-  }
-
-  if (adopter.hasOtherPets === true && animal.requirements.goodWithOtherPets === true) {
-    subPoints += 6;
-  } else if (adopter.hasOtherPets === false) {
-    subPoints += 6;
-  }
-
-  totalScore += subPoints;
-
-  return Math.min(totalScore, 100);
+const experienceLevels = {
+  beginner: 1,
+  intermediate: 2,
+  expert: 3,
 };
 
-const runSmartMatchEngine = async (animal) => {
-  try {
-    const shelter = await Shelter.findById(animal.shelterId);
-    if (!shelter) return;
-
-    const adopters = await AdopterProfile.find().populate("userId");
-    const notificationsToInsert = [];
-
-    for (const adopter of adopters) {
-      if (!adopter.userId) continue;
-
-      const score = calculateMatchScore(adopter, animal, shelter);
-
-      if (score >= 80) {
-        notificationsToInsert.push({
-          recipientId: adopter.userId._id,
-          senderId: animal.shelterId,
-          type: "SMART_MATCH",
-          title: `🐾 تطابق ذكي بنسبة ${score}%!`,
-          message: `خبر رائع! أضاف ملجأ "${shelter.name}" الحيوان "${animal.name}" الذي يطابق تفضيلاتك بنسبة ${score}%.`,
-          referenceId: animal._id,
-          matchScore: score
-        });
-      }
-    }
-
-    if (notificationsToInsert.length > 0) {
-      const savedNotifications = await Notification.insertMany(notificationsToInsert, { ordered: false });
-      
-      // إرسال الإشعارات عبر الـ WebSocket
-      const io = getIo();
-      savedNotifications.forEach(notif => {
-        const socketId = getSocketId(notif.recipientId.toString());
-        if (socketId) {
-          io.to(socketId).emit("newNotification", notif);
-        }
-      });
-    }
-  } catch (error) {
-    console.error("خطأ في محرك التطابق:", error.message);
-  }
+const activityLevels = {
+  low: 1,
+  medium: 2,
+  high: 3,
 };
 
-module.exports = { calculateMatchScore, runSmartMatchEngine };
+const matchingWeights = {
+  species: 20,
+  homeType: 15,
+  kids: 15,
+  otherPets: 15,
+  experienceLevel: 10,
+  activityLevel: 15,
+  ownerType: 5,
+  allergy: 5,
+};
+
+/*
+|--------------------------------------------------------------------------
+| Matching Service
+|--------------------------------------------------------------------------
+*/
+
+// ==================================================
+// Calculate Animal Match
+// ==================================================
+const calculateAnimalMatch = (adopter, animal) => {
+  // • Calculates the compatibility score between
+  //   an adopter profile and an animal.
+  // • Classifies fields as matched, partially matched,
+  //   or unmatched.
+  // • Limits the final score between 0 and 100.
+  // ==================================================
+
+  let earnedScore = 0;
+
+  const matchedFields = [];
+  const partialMatchedFields = [];
+  const unmatchedFields = [];
+
+  const requirements = animal.requirements || {};
+
+  // Check the preferred animal species.
+  if (
+    !adopter.preferredSpecies?.length ||
+    adopter.preferredSpecies.includes(animal.species)
+  ) {
+    earnedScore += matchingWeights.species;
+    matchedFields.push("species");
+  } else {
+    unmatchedFields.push("species");
+  }
+
+  // Check the adopter home against
+  // the animal home requirement.
+  if (
+    requirements.homeType === "any" ||
+    requirements.homeType === adopter.homeType
+  ) {
+    earnedScore += matchingWeights.homeType;
+    matchedFields.push("homeType");
+  } else {
+    unmatchedFields.push("homeType");
+  }
+
+  // The kids requirement only affects adopters
+  // who currently have children.
+  if (
+    adopter.hasKids === false ||
+    requirements.suitableForKids === true
+  ) {
+    earnedScore += matchingWeights.kids;
+    matchedFields.push("kids");
+  } else {
+    unmatchedFields.push("kids");
+  }
+
+  // The other pets requirement only affects adopters
+  // who currently own other animals.
+  if (
+    adopter.hasOtherPets === false ||
+    requirements.goodWithOtherPets === true
+  ) {
+    earnedScore += matchingWeights.otherPets;
+    matchedFields.push("otherPets");
+  } else {
+    unmatchedFields.push("otherPets");
+  }
+
+  // Compare the adopter experience level with
+  // the animal required experience level.
+  if (requirements.experienceLevel === "any") {
+    earnedScore += matchingWeights.experienceLevel;
+    matchedFields.push("experienceLevel");
+  } else {
+    const adopterExperience =
+      experienceLevels[adopter.experienceLevel] || 0;
+
+    const requiredExperience =
+      experienceLevels[requirements.experienceLevel] || 0;
+
+    if (adopterExperience >= requiredExperience) {
+      earnedScore += matchingWeights.experienceLevel;
+      matchedFields.push("experienceLevel");
+    } else if (
+      adopterExperience + 1 === requiredExperience
+    ) {
+      earnedScore +=
+        matchingWeights.experienceLevel / 2;
+
+      partialMatchedFields.push(
+        "experienceLevel",
+      );
+    } else {
+      unmatchedFields.push("experienceLevel");
+    }
+  }
+
+  const adopterActivity =
+    activityLevels[adopter.dailyActivityLevel] || 0;
+
+  const animalActivity =
+    activityLevels[
+      requirements.dailyActivityLevel
+    ] || 0;
+
+  const activityDifference = Math.abs(
+    adopterActivity - animalActivity,
+  );
+
+  // Give partial points when the activity levels
+  // differ by one level only.
+  if (activityDifference === 0) {
+    earnedScore += matchingWeights.activityLevel;
+    matchedFields.push("activityLevel");
+  } else if (activityDifference === 1) {
+    earnedScore +=
+      matchingWeights.activityLevel / 2;
+
+    partialMatchedFields.push("activityLevel");
+  } else {
+    unmatchedFields.push("activityLevel");
+  }
+
+  // Check the adopter type against
+  // the animal owner type requirement.
+  if (
+    requirements.ownerType === "any" ||
+    requirements.ownerType === adopter.ownerType
+  ) {
+    earnedScore += matchingWeights.ownerType;
+    matchedFields.push("ownerType");
+  } else {
+    unmatchedFields.push("ownerType");
+  }
+
+  // Allergy compatibility only affects adopters
+  // who have allergies.
+  if (
+    adopter.isAllergic === false ||
+    requirements.hypoallergenic === true
+  ) {
+    earnedScore += matchingWeights.allergy;
+    matchedFields.push("allergy");
+  } else {
+    unmatchedFields.push("allergy");
+  }
+
+  const matchPercentage = Math.round(earnedScore);
+
+  return {
+    matchPercentage: Math.min(
+      Math.max(matchPercentage, 0),
+      100,
+    ),
+    matchedFields,
+    partialMatchedFields,
+    unmatchedFields,
+  };
+};
+
+// ==================================================
+// Get Match Level
+// ==================================================
+const getMatchLevel = (matchPercentage) => {
+  // • Converts the match percentage into
+  //   a readable compatibility level.
+  // ==================================================
+
+  if (matchPercentage >= 80) {
+    return "excellent";
+  }
+
+  if (matchPercentage >= 60) {
+    return "good";
+  }
+
+  if (matchPercentage >= 40) {
+    return "medium";
+  }
+
+  return "low";
+};
+
+module.exports = {
+  calculateAnimalMatch,
+  getMatchLevel,
+};
