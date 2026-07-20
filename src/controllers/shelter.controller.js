@@ -1811,15 +1811,7 @@ class ShelterController {
     });
   
    }
-  
-  const currentImagesCount = shelter.images?.length || 0;
-  if (currentImagesCount + req.files.length > MAX_SHELTER_IMAGES) {
-    return res.status(400).json({
-      success: false,
-      message: `Shelter cannot have more than ${MAX_SHELTER_IMAGES} images`,
-    });
-  }
-  
+   
    if(!req.files || req.files.length===0){
   
     return res.status(400).json({
@@ -1830,6 +1822,14 @@ class ShelterController {
     });
   
    }
+  const currentImagesCount = shelter.images?.length || 0;
+  if (currentImagesCount + req.files.length > MAX_SHELTER_IMAGES) {
+    return res.status(400).json({
+      success: false,
+      message: `Shelter cannot have more than ${MAX_SHELTER_IMAGES} images`,
+    });
+  }
+  
   
   
   

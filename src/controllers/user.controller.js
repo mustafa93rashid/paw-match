@@ -627,28 +627,30 @@ class UserController {
 
     const oldImage = user.profileImage;
 
-    const uploaded = await uploadBufferToCloudinary({
-      buffer: req.file.buffer,
-      folder: "user",
-      originalName: req.file.originalname,
-    });
-
+    let uploaded;
     try {
+       uploaded = await uploadBufferToCloudinary({
+        buffer: req.file.buffer,
+        folder: "user",
+        originalName: req.file.originalname,
+      });
       user.profileImage = this.buildUploadedImage(uploaded);
 
       await user.save();
       if (oldImage?.publicId) {
-      try {
-        await deleteImage(oldImage.publicId);
-      } catch (error) {
-        console.error(
-          "Failed to delete old profile image:",
-          error.message
-        );
+        try {
+          await deleteImage(oldImage.publicId);
+        } catch (error) {
+          console.error(
+            "Failed to delete old profile image:",
+            error.message
+          );
+        }
       }
-    }
     } catch (error) {
       try {
+        // Delete the previous image only after
+        // the new image is saved successfully.
         await deleteImage(uploaded.public_id);
       } catch (cleanupError) {
         console.error(
@@ -660,18 +662,16 @@ class UserController {
       throw error;
     }
 
-    // Delete the previous image only after
-    // the new image is saved successfully.
-    if (oldImage?.publicId) {
-      try {
-        await deleteImage(oldImage.publicId);
-      } catch (cloudinaryError) {
-        console.error(
-          "Failed to delete old profile image:",
-          cloudinaryError.message,
-        );
-      }
-    }
+    // if (oldImage?.publicId) {
+    //   try {
+    //     await deleteImage(oldImage.publicId);
+    //   } catch (cloudinaryError) {
+    //     console.error(
+    //       "Failed to delete old profile image:",
+    //       cloudinaryError.message,
+    //     );
+    //   }
+    // }
 
     return res.status(200).json({
       success: true,
