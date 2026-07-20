@@ -3,7 +3,7 @@ const AdopterProfile = require("../models/AdopterProfile");
 
 /*
 |--------------------------------------------------------------------------
-| Matching Helper Functions
+| Matching Configuration
 |--------------------------------------------------------------------------
 */
 
@@ -19,282 +19,193 @@ const activityLevels = {
   high: 3,
 };
 
-/**
- * حساب نسبة التوافق بين بروفايل المتبني والحيوان.
- *
- * النتيجة النهائية تكون من 0 إلى 100.
- */
-const calculateMatchScore = (adopter, animal) => {
+const matchingWeights = {
+  species: 20,
+  homeType: 15,
+  kids: 15,
+  otherPets: 15,
+  experienceLevel: 10,
+  activityLevel: 15,
+  ownerType: 5,
+  allergy: 5,
+};
+
+/*
+|--------------------------------------------------------------------------
+| Matching Helper Functions
+|--------------------------------------------------------------------------
+*/
+
+// ==================================================
+// Calculate Animal Match
+// ==================================================
+const calculateAnimalMatch = (adopter, animal) => {
+  // • Calculates the compatibility score between
+  //   an adopter profile and an animal.
+  // • Classifies fields as matched, partially matched,
+  //   or unmatched.
+  // • Limits the final score between 0 and 100.
+  // ==================================================
+
   let earnedScore = 0;
-  let totalScore = 0;
 
-  /*
-  |--------------------------------------------------------------------------
-  | 1. نوع الحيوان المفضل - 20 نقطة
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 20;
-
-  if (
-    !adopter.preferredSpecies?.length ||
-    adopter.preferredSpecies.includes(animal.species)
-  ) {
-    earnedScore += 20;
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | 2. نوع السكن - 20 نقطة
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 20;
-
-  if (
-    animal.suitableHomeTypes?.length &&
-    animal.suitableHomeTypes.includes(adopter.homeType)
-  ) {
-    earnedScore += 20;
-  } else if (!animal.suitableHomeTypes?.length) {
-    // في حال لم يتم تحديد أنواع السكن المناسبة للحيوان،
-    // لا يتم معاقبة المستخدم بالكامل.
-    earnedScore += 10;
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | 3. وجود أطفال - 15 نقطة
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 15;
-
-  if (!adopter.hasKids) {
-    earnedScore += 15;
-  } else if (animal.goodWithKids === true) {
-    earnedScore += 15;
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | 4. وجود حيوانات أخرى - 15 نقطة
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 15;
-
-  if (!adopter.hasOtherPets) {
-    earnedScore += 15;
-  } else if (animal.goodWithOtherPets === true) {
-    earnedScore += 15;
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | 5. مستوى خبرة المتبني - 10 نقاط
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 10;
-
-  const adopterExperience =
-    experienceLevels[adopter.experienceLevel] || 0;
-
-  const requiredExperience =
-    experienceLevels[animal.requiredExperienceLevel] || 1;
-
-  if (adopterExperience >= requiredExperience) {
-    earnedScore += 10;
-  } else if (adopterExperience + 1 === requiredExperience) {
-    // توافق جزئي إذا كان الفرق مستوى واحد فقط.
-    earnedScore += 5;
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | 6. مستوى النشاط - 15 نقطة
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 15;
-
-  const adopterActivity =
-    activityLevels[adopter.dailyActivityLevel] || 0;
-
-  const animalActivity =
-    activityLevels[animal.activityLevel] || 0;
-
-  const activityDifference = Math.abs(
-    adopterActivity - animalActivity,
-  );
-
-  if (activityDifference === 0) {
-    earnedScore += 15;
-  } else if (activityDifference === 1) {
-    earnedScore += 8;
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | 7. الحساسية - 5 نقاط
-  |--------------------------------------------------------------------------
-  */
-
-  totalScore += 5;
-
-  if (!adopter.isAllergic) {
-    earnedScore += 5;
-  } else if (animal.hypoallergenic === true) {
-    earnedScore += 5;
-  }
-
-  const percentage = Math.round(
-    (earnedScore / totalScore) * 100,
-  );
-
-  return Math.min(Math.max(percentage, 0), 100);
-};
-
-/**
- * تحديد مستوى التوافق اعتماداً على النسبة.
- */
-const getMatchLevel = (percentage) => {
-  if (percentage >= 80) {
-    return "excellent";
-  }
-
-  if (percentage >= 60) {
-    return "good";
-  }
-
-  if (percentage >= 40) {
-    return "medium";
-  }
-
-  return "low";
-};
-
-/**
- * إرجاع أسباب التوافق وعدم التوافق.
- */
-const getMatchDetails = (adopter, animal) => {
   const matchedFields = [];
+  const partialMatchedFields = [];
   const unmatchedFields = [];
 
-  /*
-  |--------------------------------------------------------------------------
-  | نوع الحيوان
-  |--------------------------------------------------------------------------
-  */
+  const requirements = animal.requirements || {};
 
+  // Check the preferred animal species.
   if (
     !adopter.preferredSpecies?.length ||
     adopter.preferredSpecies.includes(animal.species)
   ) {
+    earnedScore += matchingWeights.species;
     matchedFields.push("species");
   } else {
     unmatchedFields.push("species");
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | نوع السكن
-  |--------------------------------------------------------------------------
-  */
-
+  // Check the adopter home against the animal requirement.
   if (
-    animal.suitableHomeTypes?.includes(adopter.homeType)
+    requirements.homeType === "any" ||
+    requirements.homeType === adopter.homeType
   ) {
+    earnedScore += matchingWeights.homeType;
     matchedFields.push("homeType");
   } else {
     unmatchedFields.push("homeType");
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | الأطفال
-  |--------------------------------------------------------------------------
-  */
-
-  if (!adopter.hasKids || animal.goodWithKids === true) {
+  // The kids requirement only affects adopters
+  // who currently have children.
+  if (
+    adopter.hasKids === false ||
+    requirements.suitableForKids === true
+  ) {
+    earnedScore += matchingWeights.kids;
     matchedFields.push("kids");
   } else {
     unmatchedFields.push("kids");
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | الحيوانات الأخرى
-  |--------------------------------------------------------------------------
-  */
-
+  // The other pets requirement only affects adopters
+  // who currently own other animals.
   if (
-    !adopter.hasOtherPets ||
-    animal.goodWithOtherPets === true
+    adopter.hasOtherPets === false ||
+    requirements.goodWithOtherPets === true
   ) {
+    earnedScore += matchingWeights.otherPets;
     matchedFields.push("otherPets");
   } else {
     unmatchedFields.push("otherPets");
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | الخبرة
-  |--------------------------------------------------------------------------
-  */
-
-  const adopterExperience =
-    experienceLevels[adopter.experienceLevel] || 0;
-
-  const requiredExperience =
-    experienceLevels[animal.requiredExperienceLevel] || 1;
-
-  if (adopterExperience >= requiredExperience) {
+  // Compare the adopter experience with
+  // the animal required experience level.
+  if (requirements.experienceLevel === "any") {
+    earnedScore += matchingWeights.experienceLevel;
     matchedFields.push("experienceLevel");
   } else {
-    unmatchedFields.push("experienceLevel");
-  }
+    const adopterExperience =
+      experienceLevels[adopter.experienceLevel] || 0;
 
-  /*
-  |--------------------------------------------------------------------------
-  | مستوى النشاط
-  |--------------------------------------------------------------------------
-  */
+    const requiredExperience =
+      experienceLevels[requirements.experienceLevel] || 0;
+
+    if (adopterExperience >= requiredExperience) {
+      earnedScore += matchingWeights.experienceLevel;
+      matchedFields.push("experienceLevel");
+    } else if (
+      adopterExperience + 1 === requiredExperience
+    ) {
+      earnedScore += matchingWeights.experienceLevel / 2;
+      partialMatchedFields.push("experienceLevel");
+    } else {
+      unmatchedFields.push("experienceLevel");
+    }
+  }
 
   const adopterActivity =
     activityLevels[adopter.dailyActivityLevel] || 0;
 
   const animalActivity =
-    activityLevels[animal.activityLevel] || 0;
+    activityLevels[requirements.dailyActivityLevel] || 0;
 
-  if (
-    Math.abs(adopterActivity - animalActivity) <= 1
-  ) {
+  const activityDifference = Math.abs(
+    adopterActivity - animalActivity,
+  );
+
+  // Give partial points when the activity levels
+  // differ by one level only.
+  if (activityDifference === 0) {
+    earnedScore += matchingWeights.activityLevel;
     matchedFields.push("activityLevel");
+  } else if (activityDifference === 1) {
+    earnedScore += 8;
+    partialMatchedFields.push("activityLevel");
   } else {
     unmatchedFields.push("activityLevel");
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | الحساسية
-  |--------------------------------------------------------------------------
-  */
-
+  // Check the adopter type against
+  // the animal owner type requirement.
   if (
-    !adopter.isAllergic ||
-    animal.hypoallergenic === true
+    requirements.ownerType === "any" ||
+    requirements.ownerType === adopter.ownerType
   ) {
+    earnedScore += matchingWeights.ownerType;
+    matchedFields.push("ownerType");
+  } else {
+    unmatchedFields.push("ownerType");
+  }
+
+  // Allergy compatibility only affects adopters
+  // who have allergies.
+  if (
+    adopter.isAllergic === false ||
+    requirements.hypoallergenic === true
+  ) {
+    earnedScore += matchingWeights.allergy;
     matchedFields.push("allergy");
   } else {
     unmatchedFields.push("allergy");
   }
 
+  const matchPercentage = Math.round(earnedScore);
+
   return {
+    matchPercentage: Math.min(
+      Math.max(matchPercentage, 0),
+      100,
+    ),
     matchedFields,
+    partialMatchedFields,
     unmatchedFields,
   };
+};
+
+// ==================================================
+// Get Match Level
+// ==================================================
+const getMatchLevel = (matchPercentage) => {
+  // • Converts the match percentage into
+  //   a readable compatibility level.
+  // ==================================================
+
+  if (matchPercentage >= 80) {
+    return "excellent";
+  }
+
+  if (matchPercentage >= 60) {
+    return "good";
+  }
+
+  if (matchPercentage >= 40) {
+    return "medium";
+  }
+
+  return "low";
 };
 
 /*
@@ -304,167 +215,124 @@ const getMatchDetails = (adopter, animal) => {
 */
 
 class MatchingController {
+  // ==================================================
+  // Get Matched Animals
+  // ==================================================
   getMatchedAnimals = async (req, res) => {
-    try {
-      /*
-      |--------------------------------------------------------------------------
-      | 1. جلب بروفايل المتبني
-      |--------------------------------------------------------------------------
-      */
+    // • Retrieves the current adopter profile.
+    // • Ensures all required matching fields are complete.
+    // • Retrieves available animals from approved shelters.
+    // • Calculates and sorts animals by compatibility.
+    // ==================================================
 
-      const adopter = await AdopterProfile.findOne({
-        userId: req.user._id,
-        isActive: true,
-      }).lean();
+    const adopter = await AdopterProfile.findOne({
+      userId: req.user.id,
+      isActive: true,
+    }).lean();
 
-      if (!adopter) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Adopter profile not found. Please complete your profile first.",
-        });
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | 2. التحقق من اكتمال البيانات الأساسية
-      |--------------------------------------------------------------------------
-      */
-
-      const requiredProfileFields = [
-        "homeType",
-        "experienceLevel",
-        "dailyActivityLevel",
-      ];
-
-      const missingFields = requiredProfileFields.filter(
-        (field) =>
-          adopter[field] === undefined ||
-          adopter[field] === null ||
-          adopter[field] === "",
-      );
-
-      if (missingFields.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please complete the required adopter profile fields before using the matching system.",
-          missingFields,
-        });
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | 3. جلب الحيوانات المتاحة والفعالة
-      |--------------------------------------------------------------------------
-      */
-
-      const animals = await Animal.find({
-        adoptionStatus: "available",
-        isActive: true,
-      })
-        .populate(
-          "shelterId",
-          "name city address logo isActive verificationStatus",
-        )
-        .populate(
-          "addedBy",
-          "firstName lastName role",
-        )
-        .lean();
-
-      /*
-      |--------------------------------------------------------------------------
-      | 4. استبعاد الحيوانات التابعة لملجأ غير فعال أو غير معتمد
-      |--------------------------------------------------------------------------
-      */
-
-      const availableAnimals = animals.filter((animal) => {
-        if (!animal.shelterId) {
-          return false;
-        }
-
-        const shelterIsActive =
-          animal.shelterId.isActive !== false;
-
-        const shelterIsApproved =
-          !animal.shelterId.verificationStatus ||
-          animal.shelterId.verificationStatus ===
-            "approved";
-
-        return shelterIsActive && shelterIsApproved;
-      });
-
-      /*
-      |--------------------------------------------------------------------------
-      | 5. حساب نسبة التوافق لكل حيوان
-      |--------------------------------------------------------------------------
-      */
-
-      const matchedAnimals = availableAnimals.map(
-        (animal) => {
-          const matchPercentage =
-            calculateMatchScore(adopter, animal);
-
-          const matchDetails = getMatchDetails(
-            adopter,
-            animal,
-          );
-
-          return {
-            ...animal,
-
-            matchPercentage,
-
-            matchLevel:
-              getMatchLevel(matchPercentage),
-
-            matchedFields:
-              matchDetails.matchedFields,
-
-            unmatchedFields:
-              matchDetails.unmatchedFields,
-          };
-        },
-      );
-
-      /*
-      |--------------------------------------------------------------------------
-      | 6. ترتيب الحيوانات من أعلى نسبة توافق إلى الأقل
-      |--------------------------------------------------------------------------
-      */
-
-      matchedAnimals.sort(
-        (firstAnimal, secondAnimal) =>
-          secondAnimal.matchPercentage -
-          firstAnimal.matchPercentage,
-      );
-
-      /*
-      |--------------------------------------------------------------------------
-      | 7. إرجاع النتيجة
-      |--------------------------------------------------------------------------
-      */
-
-      return res.status(200).json({
-        success: true,
-        message:
-          "Matched animals retrieved successfully",
-        count: matchedAnimals.length,
-        data: matchedAnimals,
-      });
-    } catch (error) {
-      console.error(
-        "Get matched animals error:",
-        error,
-      );
-
-      return res.status(500).json({
+    if (!adopter) {
+      return res.status(404).json({
         success: false,
         message:
-          "Server Error: Failed to calculate animal matches",
+          "Adopter profile not found or inactive. Please complete your profile first.",
       });
     }
+
+    // Ensure the profile contains all information
+    // required by the matching algorithm.
+    const requiredProfileFields = [
+      "homeType",
+      "hasKids",
+      "hasOtherPets",
+      "experienceLevel",
+      "dailyActivityLevel",
+      "isAllergic",
+      "ownerType",
+    ];
+
+    const missingFields = requiredProfileFields.filter(
+      (field) =>
+        adopter[field] === undefined ||
+        adopter[field] === null ||
+        adopter[field] === "",
+    );
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please complete the required adopter profile fields before using the matching system.",
+        missingFields,
+      });
+    }
+
+    const animals = await Animal.find({
+      adoptionStatus: "available",
+      isActive: true,
+    })
+      .populate(
+        "shelterId",
+        "name city address logo isActive isVerified verificationStatus",
+      )
+      .populate(
+        "addedBy",
+        "firstName lastName role",
+      )
+      .lean();
+
+    // Exclude animals belonging to an inactive,
+    // unverified, or unapproved shelter.
+    const availableAnimals = animals.filter((animal) => {
+      if (!animal.shelterId) {
+        return false;
+      }
+
+      return (
+        animal.shelterId.isActive === true &&
+        animal.shelterId.isVerified === true &&
+        animal.shelterId.verificationStatus === "approved"
+      );
+    });
+
+    const matchedAnimals = availableAnimals.map(
+      (animal) => {
+        const matchResult = calculateAnimalMatch(
+          adopter,
+          animal,
+        );
+
+        return {
+          ...animal,
+          matchPercentage:
+            matchResult.matchPercentage,
+          matchLevel: getMatchLevel(
+            matchResult.matchPercentage,
+          ),
+          matchedFields:
+            matchResult.matchedFields,
+          partialMatchedFields:
+            matchResult.partialMatchedFields,
+          unmatchedFields:
+            matchResult.unmatchedFields,
+        };
+      },
+    );
+
+    // Return animals from the highest match
+    // percentage to the lowest.
+    matchedAnimals.sort(
+      (firstAnimal, secondAnimal) =>
+        secondAnimal.matchPercentage -
+        firstAnimal.matchPercentage,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Matched animals retrieved successfully",
+      count: matchedAnimals.length,
+      data: matchedAnimals,
+    });
   };
 }
 

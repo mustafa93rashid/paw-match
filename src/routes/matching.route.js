@@ -7,6 +7,7 @@ const role = require("../middlewares/role");
 
 const router = express.Router();
 
+// Get matched animals for the authenticated adopter
 router.get("/", auth, role(["adopter"]), asyncHandler(matchingController.getMatchedAnimals));
 
 module.exports = router;
