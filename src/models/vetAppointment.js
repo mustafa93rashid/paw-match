@@ -6,40 +6,93 @@ const vetAppointmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: [true, "Adopter ID is required"],
-      index: true // لسرعة البحث عن مواعيد المتبني
+      index: true,
     },
+
     vetId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: [true, "Vet ID is required"],
-      index: true // لسرعة البحث عن مواعيد الطبيب
     },
+
     appointmentDate: {
       type: Date,
-      required: [true, "Appointment date is required"]
+      default: null,
     },
+
+    duration: {
+      type: Number,
+      min: [15, "Duration must be at least 15 minutes"],
+      max: [180, "Duration cannot exceed 180 minutes"],
+      default: 30,
+    },
+
     status: {
       type: String,
       enum: {
-        values: ["scheduled", "completed", "rejected"],
-        message: "{VALUE} is not a valid status"
+        values: ["pending", "scheduled", "completed", "rejected", "cancelled"],
+        message: "{VALUE} is not a valid appointment status",
       },
-      default: "scheduled"
+      default: "pending",
+      index: true,
     },
-    notes: {
+
+    requestMessage: {
       type: String,
       trim: true,
-      default: ""
-    }
+      maxlength: [1000, "Request message cannot exceed 1000 characters"],
+      default: "",
+    },
+
+    vetNotes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, "Vet notes cannot exceed 1000 characters"],
+      default: "",
+    },
+
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Rejection reason cannot exceed 500 characters"],
+      default: null,
+    },
+
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+
+    completedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
-    timestamps: true, 
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-  }
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+    },
+    toObject: {
+      virtuals: true,
+    },
+  },
 );
 
-// إضافة Compound Index للبحث السريع عن مواعيد طبيب معين في تاريخ معين
-vetAppointmentSchema.index({ vetId: 1, appointmentDate: 1 });
+vetAppointmentSchema.index({
+  vetId: 1,
+  status: 1,
+  appointmentDate: 1,
+});
 
-module.exports = mongoose.model("VetAppointment", vetAppointmentSchema);
+vetAppointmentSchema.index({
+  adopterId: 1,
+  createdAt: -1,
+});
+
+module.exports =
+  mongoose.models.VetAppointment ||
+  mongoose.model(
+    "VetAppointment",
+    vetAppointmentSchema,
+  );
