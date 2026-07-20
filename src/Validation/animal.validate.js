@@ -104,21 +104,6 @@ const createAnimalValidation = [
     .isLength({ max: 1000 })
     .withMessage("Description must not exceed 1000 characters"),
 
-  body("images")
-    .exists()
-    .withMessage("Animal images are required")
-    .bail()
-    .isArray({ min: 1 })
-    .withMessage("At least one animal image is required"),
-
-  body("images.*")
-    .isString()
-    .withMessage("Each animal image must be a string")
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage("Animal image cannot be empty"),
-
   body("shelterId")
     .optional()
     .isMongoId()

@@ -1,6 +1,5 @@
 const Review = require("../models/Review");
 const AdoptionRequest = require("../models/AdoptionRequest");
-const Appointment = require("../models/Appointment"); // 
 const asyncHandler = require("../utils/asyncHandler");
 
 /**
