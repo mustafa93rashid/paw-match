@@ -9,7 +9,6 @@ const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 
-const { uploadArray } = require("../middlewares/upload.middleware");
 const pagination = require("../middlewares/pagination");
 
 // Create animal
@@ -68,10 +67,5 @@ router.delete("/:id", [auth, role(["shelterEmployee", "superadmin"]), animalVali
 // Restore animal
 router.patch("/:id/restore", [auth, role(["shelterEmployee", "superadmin"]), animalValidation.restoreAnimalValidation], asyncHandler(animalController.restoreAnimal));
 
-// Add and remove animal images
-router.post("/:id/images",[auth, role(["shelterEmployee", "superadmin"]), uploadArray("images", 10)],asyncHandler(animalController.addAnimalImages));
-
-// Delete animal image by publicId
-router.delete("/:id/images/:publicId",[auth, role(["shelterEmployee", "superadmin"])],asyncHandler(animalController.deleteAnimalImage));
 
 module.exports = router;

@@ -910,12 +910,12 @@ buildUploadedImage = (result, isPrimary = false) => ({
       });
     }
 
-    if (animal.images.length <= 1) {
-      return res.status(400).json({
-        success: false,
-        message: "Animal must have at least one image",
-      });
-    }
+    // if (animal.images.length <= 1) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Animal must have at least one image",
+    //   });
+    // }
 
     const imageIndex = animal.images.findIndex(
       (img) => String(img._id) === String(imageId)

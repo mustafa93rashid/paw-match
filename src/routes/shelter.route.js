@@ -1,15 +1,13 @@
 const router = require("express").Router();
 const { uploadSingle, uploadArray } = require("../middlewares/upload.middleware");
 
-const shelterController = require("../controllers/shelter.controller");
+const  {MAX_SHELTER_IMAGES,  shelterController} = require("../controllers/shelter.controller");
 const shelterValidation = require("../Validation/shelter.validate");
 
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
 const asyncHandler = require("../utils/asyncHandler");
 
-
-const { uploadSingle, uploadArray } = require("../middlewares/upload.middleware");
 
 // Get nearest shelters
 // Modified by Batoul - Reason: Task 5 - Added route for nearest shelters
@@ -79,7 +77,7 @@ router.delete(
 
 router.post(
   "/:id/images",
-  [auth, role(["superadmin", "shelterEmployee"]), uploadArray("images", 8)],
+  [auth, role(["superadmin", "shelterEmployee"]), uploadArray("images", MAX_SHELTER_IMAGES)],
   asyncHandler(shelterController.addShelterImages),
 );
 

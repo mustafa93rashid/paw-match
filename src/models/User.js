@@ -1,9 +1,6 @@
 const mongoose = require("mongoose");
 const imageSchema= require("../models/image_schema");
-<<<<<<< HEAD
-=======
 
->>>>>>> origin/main
 const userSchema = new mongoose.Schema(
   {
     firstName: {
@@ -66,10 +63,7 @@ const userSchema = new mongoose.Schema(
       default: "adopter",
     },
 
-    profileImage: {
-      type: imageSchema,
-      // default: null,
-    },
+   
 
     address: {
       type: String,

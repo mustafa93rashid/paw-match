@@ -1,5 +1,5 @@
 const User = require("../models/User");
-const AdopterProfile = require("../models/AdopterProfile");
+const AdopterProfile = require("../models/adopterProfile");
 const VetProfile = require("../models/VetProfile");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 
@@ -466,12 +466,12 @@ class UserController {
     }
     const { firstName, lastName, phone, address } = req.body;
 
-    const updateData = {
-      firstName,
-      lastName,
-      phone,
-      address,
-    };
+    // const updateData = {
+    //   firstName,
+    //   lastName,
+    //   phone,
+    //   address,
+    // };
 
     const protectedFields = [
       "email",
@@ -524,168 +524,9 @@ class UserController {
     });
   };
 
-  buildUploadedImage = (result) => ({
-    url: result.secure_url,
-    publicId: result.public_id,
-  });
-
-uploadProfileImage = async (req, res) => {
-  const user = await User.findById(req.user._id);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
-    });
-  }
-
-  if (!req.file) {
-    return res.status(400).json({
-      success: false,
-      message: "Profile image is required",
-    });
-  }
-
-  if (user.profileImage) {
-    return res.status(400).json({
-      success: false,
-      message: "Profile image already exists. Use replace endpoint.",
-    });
-  }
-
-  let uploaded = null;
-
-  try {
-    uploaded = await uploadBufferToCloudinary({
-      buffer: req.file.buffer,
-      folder: "user",
-      originalName: req.file.originalname,
-    });
-
-    user.profileImage = this.buildUploadedImage(uploaded);
-
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Profile image uploaded successfully",
-      data: user,
-    });
-
-  } catch (error) {
-
-    if (uploaded) {
-      await deleteImage(uploaded.public_id);
-    }
-
-    throw error;
-  }
-};
-
- replaceProfileImage = async (req, res) => {
-  const user = await User.findById(req.user._id);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
-    });
-  }
-
-  if (!user.profileImage) {
-    return res.status(404).json({
-      success: false,
-      message: "Profile image not found",
-    });
-  }
-
-  if (!req.file) {
-    return res.status(400).json({
-      success: false,
-      message: "Profile image is required",
-    });
-  }
-
-  const oldImage = user.profileImage;
-
-  let uploaded = null;
-
-  try {
-
-    uploaded = await uploadBufferToCloudinary({
-      buffer: req.file.buffer,
-      folder: "user",
-      originalName: req.file.originalname,
-    });
 
 
-    user.profileImage = this.buildUploadedImage(uploaded);
 
-    await user.save();
-
-
-    if (oldImage?.publicId) {
-      await deleteImage(oldImage.publicId);
-    }
-
-
-    return res.status(200).json({
-      success: true,
-      message: "Profile image replaced successfully",
-      data: user,
-    });
-
-
-  } catch (error) {
-
-    if (uploaded) {
-      await deleteImage(uploaded.public_id);
-    }
-
-    throw error;
-  }
-};
-  deleteProfileImage = async (req, res) => {
-  const user = await User.findById(req.user._id);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
-    });
-  }
-
-  if (!user.profileImage) {
-    return res.status(404).json({
-      success: false,
-      message: "Profile image not found",
-    });
-  }
-
-  const oldImage = user.profileImage;
-
-  try {
-
-    await deleteImage(oldImage.publicId);
-
-    user.profileImage = null;
-
-    await user.save();
-
-
-    return res.status(200).json({
-      success: true,
-      message: "Profile image deleted successfully",
-      data: user,
-    });
-
-
-  } catch (error) {
-
-    throw error;
-
-  }
-};
   // zain hussein - دالة إنشاء مستخدم وبروفايل بواسطة السوبر أدمن
 
   // ==================================================
@@ -737,7 +578,7 @@ uploadProfileImage = async (req, res) => {
       await user.save();
     } catch (error) {
       try {
-        await deleteImage(uploaded.public_id);
+        await deleteImage(uploaded.publicId);
       } catch (cleanupError) {
         console.error(
           "Failed to clean newly uploaded profile image:",
@@ -796,6 +637,16 @@ uploadProfileImage = async (req, res) => {
       user.profileImage = this.buildUploadedImage(uploaded);
 
       await user.save();
+      if (oldImage?.publicId) {
+      try {
+        await deleteImage(oldImage.publicId);
+      } catch (error) {
+        console.error(
+          "Failed to delete old profile image:",
+          error.message
+        );
+      }
+    }
     } catch (error) {
       try {
         await deleteImage(uploaded.public_id);

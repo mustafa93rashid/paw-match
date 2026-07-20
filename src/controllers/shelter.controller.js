@@ -9,8 +9,6 @@ const { uploadBufferToCloudinary, deleteImage, deleteImages } = require("../serv
 const Animal = require("../models/Animal");
 const AdoptionRequest = require("../models/AdoptionRequest");
 
-const {uploadBufferToCloudinary, deleteImage, deleteImages} = require("../services/cloudinary.service");
-
 // Maximum number of gallery images for one shelter.
 const MAX_SHELTER_IMAGES = 8;
 
@@ -1377,810 +1375,819 @@ class ShelterController {
     });
   };
   
-}
-//============================================================
-// Build Uploaded Image Object
-//============================================================
-buildUploadedImage = (result) => ({
-  url: result.secure_url,
-  publicId: result.public_id,
-});
-
-
-//============================================================
-// Upload Shelter Logo
-//============================================================
-// • Uploads the first logo for the shelter.
-// • Allows Super Admin or authorized shelter employee.
-// • Prevents uploading another logo if one already exists.
-// • Requires one uploaded image file.
-// • Uploads the file to Cloudinary before saving its
-//   information in MongoDB.
-// • Deletes uploaded Cloudinary image if saving fails.
-//============================================================
-
-uploadLogo = async (req, res) => {
-
-  const shelter = await Shelter.findById(req.params.id);
-
-
-  if (!shelter) {
-    return res.status(404).json({
-      success: false,
-      message: "Shelter not found",
-    });
-  }
-
-
-  const canManage = await checkShelterEmployeePermission({
-    user: req.user,
-    shelter,
+  //============================================================
+  // Build Uploaded Image Object
+  //============================================================
+  buildUploadedImage = (result) => ({
+    url: result.secure_url,
+    publicId: result.public_id,
   });
-
-
-  if (!canManage) {
-    return res.status(403).json({
-      success: false,
-      message: "You are not allowed to update this shelter",
-    });
-  }
-
-
-  if (shelter.logo) {
-    return res.status(400).json({
-      success: false,
-      message: "Logo already exists. Use replace endpoint",
-    });
-  }
-
-
-  if (!req.file) {
-    return res.status(400).json({
-      success: false,
-      message: "Logo image is required",
-    });
-  }
-
-
-  let uploadedImage = null;
-
-
-  try {
-
-    const uploaded = await uploadBufferToCloudinary({
-      buffer: req.file.buffer,
-      folder: "shelterLogo",
-      originalName: req.file.originalname,
-    });
-
-
-    uploadedImage = this.buildUploadedImage(uploaded);
-
-
-    shelter.logo = uploadedImage;
-
-
-    await shelter.save();
-
-
-    return res.status(200).json({
-      success: true,
-      message: "Shelter logo uploaded successfully",
-      data: shelter,
-    });
-
-
-  } catch (error) {
-
-
-    if (uploadedImage?.publicId) {
-
-      try {
-
-        await deleteImage(uploadedImage.publicId);
-
-      } catch (cleanupError) {
-
-        console.error(
-          "Failed to clean uploaded shelter logo:",
-          cleanupError.message
-        );
-
-      }
-
+  
+  
+  //============================================================
+  // Upload Shelter Logo
+  //============================================================
+  // • Uploads the first logo for the shelter.
+  // • Allows Super Admin or authorized shelter employee.
+  // • Prevents uploading another logo if one already exists.
+  // • Requires one uploaded image file.
+  // • Uploads the file to Cloudinary before saving its
+  //   information in MongoDB.
+  // • Deletes uploaded Cloudinary image if saving fails.
+  //============================================================
+  
+  uploadLogo = async (req, res) => {
+  
+    const shelter = await Shelter.findById(req.params.id);
+  
+  
+    if (!shelter) {
+      return res.status(404).json({
+        success: false,
+        message: "Shelter not found",
+      });
     }
-
-
-    throw error;
-
-  }
-
-};
-
-
-
-//============================================================
-// Replace Shelter Logo
-//============================================================
-// • Replaces the current shelter logo.
-// • Requires a new uploaded image.
-// • Saves the new logo before deleting old one.
-// • Deletes newly uploaded image if saving fails.
-// • Failure to delete old Cloudinary image does not
-//   rollback the successful MongoDB update.
-//============================================================
-
-replaceLogo = async (req, res) => {
-
-
-  const shelter = await Shelter.findById(req.params.id);
-
-
-
-  if (!shelter) {
-
-    return res.status(404).json({
-      success:false,
-      message:"Shelter not found",
+  
+  
+    const canManage = await checkShelterEmployeePermission({
+      user: req.user,
+      shelter,
     });
-
-  }
-
-
-
-  const canManage = await checkShelterEmployeePermission({
-    user:req.user,
-    shelter,
-  });
-
-
-
-  if (!canManage) {
-
-    return res.status(403).json({
-      success:false,
-      message:"You are not allowed to update this shelter",
+  
+  
+    if (!canManage) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to update this shelter",
+      });
+    }
+  
+  
+    if (shelter.logo) {
+      return res.status(400).json({
+        success: false,
+        message: "Logo already exists. Use replace endpoint",
+      });
+    }
+  
+  
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Logo image is required",
+      });
+    }
+  
+  
+    let uploadedImage = null;
+  
+  
+    try {
+  
+      const uploaded = await uploadBufferToCloudinary({
+        buffer: req.file.buffer,
+        folder: "shelterLogo",
+        originalName: req.file.originalname,
+      });
+  
+  
+      uploadedImage = this.buildUploadedImage(uploaded);
+  
+  
+      shelter.logo = uploadedImage;
+  
+  
+      await shelter.save();
+  
+  
+      return res.status(200).json({
+        success: true,
+        message: "Shelter logo uploaded successfully",
+        data: shelter,
+      });
+  
+  
+    } catch (error) {
+  
+  
+      if (uploadedImage?.publicId) {
+  
+        try {
+  
+          await deleteImage(uploadedImage.publicId);
+  
+        } catch (cleanupError) {
+  
+          console.error(
+            "Failed to clean uploaded shelter logo:",
+            cleanupError.message
+          );
+  
+        }
+  
+      }
+  
+  
+      throw error;
+  
+    }
+  
+  };
+  
+  
+  
+  //============================================================
+  // Replace Shelter Logo
+  //============================================================
+  // • Replaces the current shelter logo.
+  // • Requires a new uploaded image.
+  // • Saves the new logo before deleting old one.
+  // • Deletes newly uploaded image if saving fails.
+  // • Failure to delete old Cloudinary image does not
+  //   rollback the successful MongoDB update.
+  //============================================================
+  
+  replaceLogo = async (req, res) => {
+  
+  
+    const shelter = await Shelter.findById(req.params.id);
+  
+  
+  
+    if (!shelter) {
+  
+      return res.status(404).json({
+        success:false,
+        message:"Shelter not found",
+      });
+  
+    }
+  
+  
+  
+    const canManage = await checkShelterEmployeePermission({
+      user:req.user,
+      shelter,
     });
-
-  }
-
-
-
-  if (!shelter.logo) {
-
-    return res.status(404).json({
-      success:false,
-      message:"Logo not found. Use upload endpoint",
+  
+  
+  
+    if (!canManage) {
+  
+      return res.status(403).json({
+        success:false,
+        message:"You are not allowed to update this shelter",
+      });
+  
+    }
+  
+  
+  
+    if (!shelter.logo) {
+  
+      return res.status(404).json({
+        success:false,
+        message:"Logo not found. Use upload endpoint",
+      });
+  
+    }
+  
+  
+  
+    if (!req.file) {
+  
+      return res.status(400).json({
+        success:false,
+        message:"Logo image is required",
+      });
+  
+    }
+  
+  
+  
+    const oldLogo = shelter.logo;
+  
+    let newLogo = null;
+  
+  
+  
+    try {
+  
+  
+      const uploaded = await uploadBufferToCloudinary({
+  
+        buffer:req.file.buffer,
+        folder:"shelterLogo",
+        originalName:req.file.originalname,
+  
+      });
+  
+  
+  
+      newLogo = this.buildUploadedImage(uploaded);
+  
+  
+  
+      shelter.logo = newLogo;
+  
+  
+  
+      await shelter.save();
+  
+  
+  
+      // Delete old Cloudinary file only after
+      // saving the new logo successfully.
+  
+      if(oldLogo?.publicId){
+  
+        try {
+  
+          await deleteImage(oldLogo.publicId);
+  
+        } catch (cloudinaryError) {
+  
+          console.error(
+            "Failed to delete old shelter logo:",
+            cloudinaryError.message
+          );
+  
+        }
+  
+      }
+  
+  
+  
+      return res.status(200).json({
+  
+        success:true,
+        message:"Shelter logo replaced successfully",
+        data:shelter,
+  
+      });
+  
+  
+  
+    } catch(error){
+  
+  
+  
+      if(newLogo?.publicId){
+  
+        try {
+  
+          await deleteImage(newLogo.publicId);
+  
+        } catch(cleanupError){
+  
+          console.error(
+            "Failed to clean new shelter logo:",
+            cleanupError.message
+          );
+  
+        }
+  
+      }
+  
+  
+  
+      throw error;
+  
+    }
+  
+  };
+  //============================================================
+  // Delete Shelter Logo
+  //============================================================
+  // • Removes the shelter logo.
+  // • Allows Super Admin or authorized shelter employee.
+  // • Removes logo reference from MongoDB.
+  // • Deletes Cloudinary file after database update succeeds.
+  // • Cloudinary deletion failure does not restore database data.
+  //============================================================
+  
+  deleteLogo = async (req, res) => {
+  
+  
+    const shelter = await Shelter.findById(req.params.id);
+  
+  
+  
+    if (!shelter) {
+  
+      return res.status(404).json({
+        success:false,
+        message:"Shelter not found",
+      });
+  
+    }
+  
+  
+  
+    const canManage = await checkShelterEmployeePermission({
+      user:req.user,
+      shelter,
     });
-
-  }
-
-
-
-  if (!req.file) {
-
-    return res.status(400).json({
-      success:false,
-      message:"Logo image is required",
-    });
-
-  }
-
-
-
-  const oldLogo = shelter.logo;
-
-  let newLogo = null;
-
-
-
-  try {
-
-
-    const uploaded = await uploadBufferToCloudinary({
-
-      buffer:req.file.buffer,
-      folder:"shelterLogo",
-      originalName:req.file.originalname,
-
-    });
-
-
-
-    newLogo = this.buildUploadedImage(uploaded);
-
-
-
-    shelter.logo = newLogo;
-
-
-
+  
+  
+  
+    if(!canManage){
+  
+      return res.status(403).json({
+        success:false,
+        message:"You are not allowed to update this shelter",
+      });
+  
+    }
+  
+  
+  
+    if(!shelter.logo){
+  
+      return res.status(404).json({
+        success:false,
+        message:"Logo not found",
+      });
+  
+    }
+  
+  
+  
+    const logoToDelete = shelter.logo;
+  
+  
+  
+    // Remove MongoDB reference first.
+    shelter.logo = null;
+  
+  
+  
     await shelter.save();
-
-
-
-    // Delete old Cloudinary file only after
-    // saving the new logo successfully.
-
-    if(oldLogo?.publicId){
-
+  
+  
+  
+    // Delete Cloudinary file after MongoDB succeeds.
+  
+    if(logoToDelete.publicId){
+  
       try {
-
-        await deleteImage(oldLogo.publicId);
-
-      } catch (cloudinaryError) {
-
+  
+        await deleteImage(logoToDelete.publicId);
+  
+      } catch(cloudinaryError){
+  
         console.error(
-          "Failed to delete old shelter logo:",
+          "Failed to delete shelter logo from Cloudinary:",
           cloudinaryError.message
         );
-
+  
       }
-
+  
     }
-
-
-
+  
+  
+  
     return res.status(200).json({
-
+  
       success:true,
-      message:"Shelter logo replaced successfully",
+      message:"Shelter logo deleted successfully",
       data:shelter,
-
+  
     });
-
-
-
-  } catch(error){
-
-
-
-    if(newLogo?.publicId){
-
-      try {
-
-        await deleteImage(newLogo.publicId);
-
-      } catch(cleanupError){
-
-        console.error(
-          "Failed to clean new shelter logo:",
-          cleanupError.message
-        );
-
-      }
-
-    }
-
-
-
-    throw error;
-
-  }
-
-};
-//============================================================
-// Delete Shelter Logo
-//============================================================
-// • Removes the shelter logo.
-// • Allows Super Admin or authorized shelter employee.
-// • Removes logo reference from MongoDB.
-// • Deletes Cloudinary file after database update succeeds.
-// • Cloudinary deletion failure does not restore database data.
-//============================================================
-
-deleteLogo = async (req, res) => {
-
-
-  const shelter = await Shelter.findById(req.params.id);
-
-
-
-  if (!shelter) {
-
+  
+  
+  };
+  
+  
+  
+  
+  //============================================================
+  // Add Shelter Images
+  //============================================================
+  // • Adds one or more gallery images to the shelter.
+  // • Allows Super Admin or authorized shelter employee.
+  // • Requires at least one uploaded image.
+  // • Saves image URL and Cloudinary public ID.
+  // • Removes all newly uploaded Cloudinary files if
+  //   uploading or saving fails.
+  //============================================================
+  
+  addShelterImages = async (req,res)=>{
+  
+  
+   const shelter = await Shelter.findById(req.params.id);
+  
+  
+  
+   if(!shelter){
+  
     return res.status(404).json({
+  
       success:false,
       message:"Shelter not found",
+  
     });
-
-  }
-
-
-
-  const canManage = await checkShelterEmployeePermission({
+  
+   }
+  
+  
+  
+   const canManage = await checkShelterEmployeePermission({
+  
     user:req.user,
     shelter,
-  });
-
-
-
-  if(!canManage){
-
-    return res.status(403).json({
-      success:false,
-      message:"You are not allowed to update this shelter",
-    });
-
-  }
-
-
-
-  if(!shelter.logo){
-
-    return res.status(404).json({
-      success:false,
-      message:"Logo not found",
-    });
-
-  }
-
-
-
-  const logoToDelete = shelter.logo;
-
-
-
-  // Remove MongoDB reference first.
-  shelter.logo = null;
-
-
-
-  await shelter.save();
-
-
-
-  // Delete Cloudinary file after MongoDB succeeds.
-
-  if(logoToDelete.publicId){
-
-    try {
-
-      await deleteImage(logoToDelete.publicId);
-
-    } catch(cloudinaryError){
-
-      console.error(
-        "Failed to delete shelter logo from Cloudinary:",
-        cloudinaryError.message
-      );
-
-    }
-
-  }
-
-
-
-  return res.status(200).json({
-
-    success:true,
-    message:"Shelter logo deleted successfully",
-    data:shelter,
-
-  });
-
-
-};
-
-
-
-
-//============================================================
-// Add Shelter Images
-//============================================================
-// • Adds one or more gallery images to the shelter.
-// • Allows Super Admin or authorized shelter employee.
-// • Requires at least one uploaded image.
-// • Saves image URL and Cloudinary public ID.
-// • Removes all newly uploaded Cloudinary files if
-//   uploading or saving fails.
-//============================================================
-
-addShelterImages = async (req,res)=>{
-
-
- const shelter = await Shelter.findById(req.params.id);
-
-
-
- if(!shelter){
-
-  return res.status(404).json({
-
-    success:false,
-    message:"Shelter not found",
-
-  });
-
- }
-
-
-
- const canManage = await checkShelterEmployeePermission({
-
-  user:req.user,
-  shelter,
-
- });
-
-
-
- if(!canManage){
-
-  return res.status(403).json({
-
-   success:false,
-   message:"You are not allowed to update this shelter",
-
-  });
-
- }
-
-
-
- if(!req.files || req.files.length===0){
-
-  return res.status(400).json({
-
-   success:false,
-   message:"At least one image is required",
-
-  });
-
- }
-
-
-
- const uploadedImages=[];
-
-
-
- try{
-
-
-  for(const file of req.files){
-
-
-
-   const uploaded = await uploadBufferToCloudinary({
-
-    buffer:file.buffer,
-    folder:"shelterImage",
-    originalName:file.originalname,
-
+  
    });
-
-
-
-   uploadedImages.push(
-
-    this.buildUploadedImage(uploaded)
-
-   );
-
-
+  
+  
+  
+   if(!canManage){
+  
+    return res.status(403).json({
+  
+     success:false,
+     message:"You are not allowed to update this shelter",
+  
+    });
+  
+   }
+  
+  const currentImagesCount = shelter.images?.length || 0;
+  if (currentImagesCount + req.files.length > MAX_SHELTER_IMAGES) {
+    return res.status(400).json({
+      success: false,
+      message: `Shelter cannot have more than ${MAX_SHELTER_IMAGES} images`,
+    });
   }
-
-
-
-
-  if(!Array.isArray(shelter.images)){
-
-    shelter.images=[];
-
-  }
-
-
-
-
-  shelter.images.push(...uploadedImages);
-
-
-
-  await shelter.save();
-
-
-
-
-  return res.status(200).json({
-
-   success:true,
-   message:"Shelter images added successfully",
-   data:shelter,
-
-  });
-
-
-
-
-
- }catch(error){
-
-
-
-  if(uploadedImages.length > 0){
-
-    try{
-
-      await deleteImages(
-
-        uploadedImages.map(
-          image=>image.publicId
-        )
-
-      );
-
-
-    }catch(cleanupError){
-
-
-      console.error(
-
-        "Failed to clean uploaded shelter images:",
-        cleanupError.message
-
-      );
-
-
+  
+   if(!req.files || req.files.length===0){
+  
+    return res.status(400).json({
+  
+     success:false,
+     message:"At least one image is required",
+  
+    });
+  
+   }
+  
+  
+  
+   const uploadedImages=[];
+  
+  
+  
+   try{
+  
+  
+    for(const file of req.files){
+  
+  
+  
+     const uploaded = await uploadBufferToCloudinary({
+  
+      buffer:file.buffer,
+      folder:"shelterImage",
+      originalName:file.originalname,
+  
+     });
+  
+  
+  
+     uploadedImages.push(
+  
+      this.buildUploadedImage(uploaded)
+  
+     );
+  
+  
     }
-
-  }
-
-
-
-  throw error;
-
-
- }
-
-
-};
-//============================================================
-// Delete Shelter Image
-//============================================================
-// • Deletes one shelter gallery image.
-// • Allows Super Admin or authorized shelter employee.
-// • Receives image id from route params.
-// • Removes MongoDB image reference.
-// • Deletes Cloudinary file after database update succeeds.
-//============================================================
-
-deleteShelterImage = async(req,res)=>{
-
-
- const shelter = await Shelter.findById(req.params.id);
-
-
-
- if(!shelter){
-
-  return res.status(404).json({
-
-   success:false,
-   message:"Shelter not found",
-
-  });
-
- }
-
-
-
- const canManage = await checkShelterEmployeePermission({
-
-  user:req.user,
-  shelter,
-
- });
-
-
-
- if(!canManage){
-
-  return res.status(403).json({
-
-   success:false,
-   message:"You are not allowed to update this shelter",
-
-  });
-
- }
-
-
-
- const {imageId}=req.params;
-
-
-
- const imageIndex = shelter.images.findIndex(
-
-  img => String(img._id) === String(imageId)
-
- );
-
-
-
- if(imageIndex === -1){
-
-  return res.status(404).json({
-
-   success:false,
-   message:"Image not found",
-
-  });
-
- }
-
-
-
- const image = shelter.images[imageIndex];
-
-
-
- // Remove MongoDB reference first.
-
- shelter.images.splice(imageIndex,1);
-
-
-
- await shelter.save();
-
-
-
- // Delete Cloudinary file after MongoDB succeeds.
-
- if(image.publicId){
-
-  try{
-
-    await deleteImage(image.publicId);
-
-
-  }catch(cloudinaryError){
-
-
-    console.error(
-
-      "Failed to delete shelter image from Cloudinary:",
-      cloudinaryError.message
-
+  
+  
+  
+  
+    if(!Array.isArray(shelter.images)){
+  
+      shelter.images=[];
+  
+    }
+  
+  
+  
+  
+    shelter.images.push(...uploadedImages);
+  
+  
+  
+    await shelter.save();
+  
+  
+  
+  
+    return res.status(200).json({
+  
+     success:true,
+     message:"Shelter images added successfully",
+     data:shelter,
+  
+    });
+  
+  
+  
+  
+  
+   }catch(error){
+  
+  
+  
+    if(uploadedImages.length > 0){
+  
+      try{
+  
+        await deleteImages(
+  
+          uploadedImages.map(
+            image=>image.publicId
+          )
+  
+        );
+  
+  
+      }catch(cleanupError){
+  
+  
+        console.error(
+  
+          "Failed to clean uploaded shelter images:",
+          cleanupError.message
+  
+        );
+  
+  
+      }
+  
+    }
+  
+  
+  
+    throw error;
+  
+  
+   }
+  
+  
+  };
+  //============================================================
+  // Delete Shelter Image
+  //============================================================
+  // • Deletes one shelter gallery image.
+  // • Allows Super Admin or authorized shelter employee.
+  // • Receives image id from route params.
+  // • Removes MongoDB image reference.
+  // • Deletes Cloudinary file after database update succeeds.
+  //============================================================
+  
+  deleteShelterImage = async(req,res)=>{
+  
+  
+   const shelter = await Shelter.findById(req.params.id);
+  
+  
+  
+   if(!shelter){
+  
+    return res.status(404).json({
+  
+     success:false,
+     message:"Shelter not found",
+  
+    });
+  
+   }
+  
+  
+  
+   const canManage = await checkShelterEmployeePermission({
+  
+    user:req.user,
+    shelter,
+  
+   });
+  
+  
+  
+   if(!canManage){
+  
+    return res.status(403).json({
+  
+     success:false,
+     message:"You are not allowed to update this shelter",
+  
+    });
+  
+   }
+  
+  
+  
+   const {imageId}=req.params;
+  
+  
+  
+   const imageIndex = shelter.images.findIndex(
+  
+    img => String(img._id) === String(imageId)
+  
+   );
+  
+  
+  
+   if(imageIndex === -1){
+  
+    return res.status(404).json({
+  
+     success:false,
+     message:"Image not found",
+  
+    });
+  
+   }
+  
+  
+  
+   const image = shelter.images[imageIndex];
+  
+  
+  
+   // Remove MongoDB reference first.
+  
+   shelter.images.splice(imageIndex,1);
+  
+  
+  
+   await shelter.save();
+  
+  
+  
+   // Delete Cloudinary file after MongoDB succeeds.
+  
+   if(image.publicId){
+  
+    try{
+  
+      await deleteImage(image.publicId);
+  
+  
+    }catch(cloudinaryError){
+  
+  
+      console.error(
+  
+        "Failed to delete shelter image from Cloudinary:",
+        cloudinaryError.message
+  
+      );
+  
+  
+    }
+  
+   }
+  
+  
+  
+   return res.status(200).json({
+  
+    success:true,
+    message:"Shelter image deleted successfully",
+    data:shelter,
+  
+   });
+  
+  
+  };
+  
+  
+  
+  
+  //============================================================
+  // Delete All Shelter Images
+  //============================================================
+  // • Deletes all shelter gallery images.
+  // • Allows Super Admin or authorized shelter employee.
+  // • Removes MongoDB references.
+  // • Deletes Cloudinary files after database update succeeds.
+  //============================================================
+  
+  deleteAllShelterImages = async(req,res)=>{
+  
+  
+   const shelter = await Shelter.findById(req.params.id);
+  
+  
+  
+   if(!shelter){
+  
+    return res.status(404).json({
+  
+     success:false,
+     message:"Shelter not found",
+  
+    });
+  
+   }
+  
+  
+  
+   const canManage = await checkShelterEmployeePermission({
+  
+    user:req.user,
+    shelter,
+  
+   });
+  
+  
+  
+   if(!canManage){
+  
+    return res.status(403).json({
+  
+     success:false,
+     message:"You are not allowed to update this shelter",
+  
+    });
+  
+   }
+  
+  
+  
+   if(!shelter.images || shelter.images.length===0){
+  
+    return res.status(404).json({
+  
+     success:false,
+     message:"No shelter images found",
+  
+    });
+  
+   }
+  
+  
+  
+   const imagesToDelete = shelter.images;
+  
+  
+  
+   // Remove MongoDB references first.
+  
+   shelter.images=[];
+  
+  
+  
+   await shelter.save();
+  
+  
+  
+  
+   // Delete Cloudinary files after MongoDB succeeds.
+  
+   try{
+  
+  
+    await deleteImages(
+  
+      imagesToDelete.map(
+        image=>image.publicId
+      )
+  
     );
-
-
-  }
-
- }
-
-
-
- return res.status(200).json({
-
-  success:true,
-  message:"Shelter image deleted successfully",
-  data:shelter,
-
- });
-
-
+  
+  
+   }catch(cloudinaryError){
+  
+  
+    console.error(
+  
+      "Failed to delete shelter images from Cloudinary:",
+      cloudinaryError.message
+  
+    );
+  
+  
+   }
+  
+  
+  
+   return res.status(200).json({
+  
+    success:true,
+    message:"All shelter images deleted successfully",
+    data:shelter,
+  
+   });
+  
+  
+  };
+}
+module.exports = {
+  MAX_SHELTER_IMAGES,
+  shelterController: new ShelterController(),
 };
-
-
-
-
-//============================================================
-// Delete All Shelter Images
-//============================================================
-// • Deletes all shelter gallery images.
-// • Allows Super Admin or authorized shelter employee.
-// • Removes MongoDB references.
-// • Deletes Cloudinary files after database update succeeds.
-//============================================================
-
-deleteAllShelterImages = async(req,res)=>{
-
-
- const shelter = await Shelter.findById(req.params.id);
-
-
-
- if(!shelter){
-
-  return res.status(404).json({
-
-   success:false,
-   message:"Shelter not found",
-
-  });
-
- }
-
-
-
- const canManage = await checkShelterEmployeePermission({
-
-  user:req.user,
-  shelter,
-
- });
-
-
-
- if(!canManage){
-
-  return res.status(403).json({
-
-   success:false,
-   message:"You are not allowed to update this shelter",
-
-  });
-
- }
-
-
-
- if(!shelter.images || shelter.images.length===0){
-
-  return res.status(404).json({
-
-   success:false,
-   message:"No shelter images found",
-
-  });
-
- }
-
-
-
- const imagesToDelete = shelter.images;
-
-
-
- // Remove MongoDB references first.
-
- shelter.images=[];
-
-
-
- await shelter.save();
-
-
-
-
- // Delete Cloudinary files after MongoDB succeeds.
-
- try{
-
-
-  await deleteImages(
-
-    imagesToDelete.map(
-      image=>image.publicId
-    )
-
-  );
-
-
- }catch(cloudinaryError){
-
-
-  console.error(
-
-    "Failed to delete shelter images from Cloudinary:",
-    cloudinaryError.message
-
-  );
-
-
- }
-
-
-
- return res.status(200).json({
-
-  success:true,
-  message:"All shelter images deleted successfully",
-  data:shelter,
-
- });
-
-
-};
-module.exports = new ShelterController();

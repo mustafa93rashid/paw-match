@@ -26,7 +26,7 @@ const errorHandler = (err, req, res, next) => {
 
 
   if (err?.message && /Only JPEG, PNG, and WebP images are allowed/i.test(err.message)) {
-rigin/main
+
     return res.status(400).json({
       success: false,
       message: err.message,
