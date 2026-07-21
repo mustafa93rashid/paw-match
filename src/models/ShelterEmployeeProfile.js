@@ -17,9 +17,10 @@ const shelterEmployeeProfileSchema = new mongoose.Schema(
 
     position: {
       type: String,
-      enum: ["Manager", "Employee"],
-      default: "Employee",
+      enum: ["manager", "employee"],
+      default: "employee",
       trim: true,
+      lowercase: true,
     },
 
     employeeNumber: {

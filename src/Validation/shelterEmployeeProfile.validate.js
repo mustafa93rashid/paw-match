@@ -15,7 +15,9 @@ const updateEmployeeWorkDataValidation = [
   // Validate the employee position
   body("position")
     .optional()
-    .isIn(["Manager", "Employee"])
+    .trim()
+    .toLowerCase()
+    .isIn(["manager", "employee"])
     .withMessage("Position must be either Manager or Employee"),
 
   // Validate the employee number
