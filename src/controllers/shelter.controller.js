@@ -5,8 +5,9 @@ const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 const VetProfile = require("../models/VetProfile");
 const Animal = require("../models/Animal");
 const AdoptionRequest = require("../models/AdoptionRequest");
+const Review = require("../models/Review");
 
-const {uploadBufferToCloudinary, deleteImage, deleteImages} = require("../services/cloudinary.service");
+const { uploadBufferToCloudinary, deleteImage, deleteImages } = require("../services/cloudinary.service");
 
 // Maximum number of gallery images for one shelter.
 const MAX_SHELTER_IMAGES = 8;
@@ -73,6 +74,38 @@ const checkShelterEmployeePermission = async ({
 };
 
 class ShelterController {
+  //============================================================
+  // Get Shelter Reviews
+  //============================================================
+  // • Retrieves all published reviews for one shelter.
+  // • Returns reviews ordered from newest to oldest.
+  // • Populates limited adopter information.
+  // • Populates the user who added the official reply.
+  //============================================================
+  getShelterReviews = async (shelterId) => {
+    const reviews = await Review.find({
+      targetType: "shelter",
+      targetId: shelterId,
+      status: "published",
+    })
+      .populate({
+        path: "adopterId",
+        select: "firstName lastName profileImage",
+      })
+      .populate({
+        path: "reply.repliedBy",
+        select: "firstName lastName role profileImage",
+      })
+      .select(
+        "adopterId rating comment reply isEdited createdAt updatedAt",
+      )
+      .sort({
+        createdAt: -1,
+      });
+
+    return reviews;
+  };
+
   //============================================================
   // Build Uploaded Image
   //============================================================
@@ -368,6 +401,7 @@ class ShelterController {
       data: shelters,
     });
   };
+
   //============================================================
   // Get Shelter by ID
   //============================================================
@@ -379,13 +413,21 @@ class ShelterController {
     // • Other users receive public information only.
     // • Public access is allowed only when the shelter is
     //   approved, verified, and active.
+    // • Returns all published shelter reviews.
     //============================================================
 
     const shelterId = req.params.id;
 
     const currentUser = req.user;
 
-    // Super Admin receives full details.
+    //============================================================
+    // Super Admin Access
+    //============================================================
+    // • Super Admin receives full shelter information.
+    // • Returns employees, animals, approval information,
+    //   and all published reviews.
+    //============================================================
+
     if (currentUser.role === "superadmin") {
       const shelter = await Shelter.findById(shelterId)
         .populate({
@@ -398,12 +440,13 @@ class ShelterController {
         })
         .populate({
           path: "employees",
-          select: "firstName lastName email phone role isActive",
+          select:
+            "firstName lastName email phone role profileImage isActive",
         })
         .populate({
           path: "animalIds",
           select:
-            "name species breed gender age ageUnit adoptionStatus healthStatus images isActive",
+            "name species breed gender age ageUnit size color adoptionStatus healthStatus vaccinated images isActive",
         });
 
       if (!shelter) {
@@ -413,16 +456,27 @@ class ShelterController {
         });
       }
 
+      const reviews = await this.getShelterReviews(shelter._id);
+
       return res.status(200).json({
         success: true,
         accessLevel: "superadmin",
-        data: shelter,
+        data: {
+          ...shelter.toObject(),
+          reviews,
+        },
       });
     }
 
-    // Shelter Employees receive administrative details
-    // only when their active profile is linked
-    // to the requested shelter.
+    //============================================================
+    // Shelter Employee Access
+    //============================================================
+    // • Checks whether the current employee has an active
+    //   profile linked to the requested shelter.
+    // • Linked employees receive administrative information.
+    // • Returns animals, employees, and published reviews.
+    //============================================================
+
     if (currentUser.role === "shelterEmployee") {
       const employeeProfile = await ShelterEmployeeProfile.findOne({
         userId: currentUser._id,
@@ -438,12 +492,13 @@ class ShelterController {
           })
           .populate({
             path: "employees",
-            select: "firstName lastName email phone role isActive",
+            select:
+              "firstName lastName email phone role profileImage isActive",
           })
           .populate({
             path: "animalIds",
             select:
-              "name species breed gender age ageUnit adoptionStatus healthStatus images isActive addedBy createdAt",
+              "name species breed gender age ageUnit size color adoptionStatus healthStatus vaccinated images isActive addedBy createdAt",
             populate: {
               path: "addedBy",
               select: "firstName lastName role",
@@ -457,15 +512,29 @@ class ShelterController {
           });
         }
 
+        const reviews = await this.getShelterReviews(shelter._id);
+
         return res.status(200).json({
           success: true,
           accessLevel: "shelterEmployee",
-          data: shelter,
+          data: {
+            ...shelter.toObject(),
+            reviews,
+          },
         });
       }
     }
 
-    // Public access.
+    //============================================================
+    // Public Access
+    //============================================================
+    // • Returns only approved, verified, and active shelters.
+    // • Returns public shelter information only.
+    // • Returns active animals that are available or pending.
+    // • Returns average rating, total reviews,
+    //   and all published reviews.
+    //============================================================
+
     const shelter = await Shelter.findOne({
       _id: shelterId,
       verificationStatus: "approved",
@@ -487,9 +556,13 @@ class ShelterController {
           "socialLinks",
           "phone",
           "email",
+          "averageRating",
+          "totalReviews",
           "verificationStatus",
           "isVerified",
           "isActive",
+          "createdAt",
+          "updatedAt",
         ].join(" "),
       )
       .populate({
@@ -511,10 +584,15 @@ class ShelterController {
       });
     }
 
+    const reviews = await this.getShelterReviews(shelter._id);
+
     return res.status(200).json({
       success: true,
       accessLevel: "public",
-      data: shelter,
+      data: {
+        ...shelter.toObject(),
+        reviews,
+      },
     });
   };
 

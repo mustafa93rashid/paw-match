@@ -1,6 +1,41 @@
 const VetProfile = require("../models/VetProfile");
+const Review = require("../models/Review");
 
 class VetProfileController {
+  // ==================================================
+  // Get Vet Reviews
+  // ==================================================
+  getVetReviews = async (vetUserId) => {
+    // ==================================================
+    // • Retrieves all published reviews for one vet.
+    // • Uses the vet User ID as the review target ID.
+    // • Populates limited adopter information.
+    // • Populates official reply information.
+    // • Returns reviews from newest to oldest.
+    // ==================================================
+    const reviews = await Review.find({
+      targetType: "vet",
+      targetId: vetUserId,
+      status: "published",
+    })
+      .populate({
+        path: "adopterId",
+        select: "firstName lastName profileImage",
+      })
+      .populate({
+        path: "reply.repliedBy",
+        select: "firstName lastName role profileImage",
+      })
+      .select(
+        "adopterId rating comment reply isEdited createdAt updatedAt",
+      )
+      .sort({
+        createdAt: -1,
+      });
+
+    return reviews;
+  };
+
   // ==================================================
   // Get authenticated vet profile
   // ==================================================
@@ -9,6 +44,7 @@ class VetProfileController {
     // • Retrieves the authenticated vet profile.
     // • Loads the related user personal information.
     // • Loads the shelter assigned to the vet.
+    // • Returns all published reviews for the vet.
     // • Returns 404 if the vet profile does not exist.
     // • Access is restricted to authenticated vets only.
     // ==================================================
@@ -34,10 +70,15 @@ class VetProfileController {
       });
     }
 
+    const reviews = await this.getVetReviews(currentUserId);
+
     return res.status(200).json({
       success: true,
       message: "Vet profile retrieved successfully",
-      data: profile,
+      data: {
+        ...profile.toObject(),
+        reviews,
+      },
     });
   };
 
@@ -115,6 +156,7 @@ class VetProfileController {
     // • Retrieves all active vet profiles.
     // • Supports filtering by shelter and specialization.
     // • Loads the related user and shelter information.
+    // • Returns published reviews for every vet.
     // • Sorts the results from newest to oldest.
     // • Access requires authentication.
     // ==================================================
@@ -149,11 +191,24 @@ class VetProfileController {
         createdAt: -1,
       });
 
+    const profilesWithReviews = await Promise.all(
+      profiles.map(async (profile) => {
+        const vetUserId = profile.userId?._id || profile.userId;
+
+        const reviews = await this.getVetReviews(vetUserId);
+
+        return {
+          ...profile.toObject(),
+          reviews,
+        };
+      }),
+    );
+
     return res.status(200).json({
       success: true,
       message: "Vets retrieved successfully",
-      count: profiles.length,
-      data: profiles,
+      count: profilesWithReviews.length,
+      data: profilesWithReviews,
     });
   };
 
@@ -165,6 +220,7 @@ class VetProfileController {
     // • Retrieves a vet profile using the User ID.
     // • Loads the related user personal information.
     // • Loads the shelter assigned to the vet.
+    // • Returns all published reviews for the vet.
     // • Returns 404 if the vet profile does not exist.
     // • Access requires authentication.
     // ==================================================
@@ -190,10 +246,15 @@ class VetProfileController {
       });
     }
 
+    const reviews = await this.getVetReviews(userId);
+
     return res.status(200).json({
       success: true,
       message: "Vet profile retrieved successfully",
-      data: profile,
+      data: {
+        ...profile.toObject(),
+        reviews,
+      },
     });
   };
 }
