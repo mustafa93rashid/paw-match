@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { uploadArray } = require("../middlewares/upload.middleware");
+const { uploadSingle, uploadArray } = require("../middlewares/upload.middleware");
 
 const animalController = require("../controllers/animal.controller");
 const animalValidation = require("../Validation/animal.validate");
@@ -69,6 +69,11 @@ router.delete("/:id", [auth, role(["shelterEmployee", "superadmin"]), animalVali
 // Restore animal
 router.patch("/:id/restore", [auth, role(["shelterEmployee", "superadmin"]), animalValidation.restoreAnimalValidation], asyncHandler(animalController.restoreAnimal));
 
-
+router.patch(
+  "/:id/images/:imageId",
+  [auth, role(["shelterEmployee", "superadmin"])],
+  uploadSingle("image"),
+  asyncHandler(animalController.replaceAnimalImage)
+);
 
 module.exports = router;

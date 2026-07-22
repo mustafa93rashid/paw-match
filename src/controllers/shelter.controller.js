@@ -2186,6 +2186,92 @@ class ShelterController {
   
   
   };
+  replaceShelterImage = async (req, res) => {
+
+  const shelter = await Shelter.findById(req.params.id);
+
+  if (!shelter) {
+    return res.status(404).json({
+      success: false,
+      message: "Shelter not found",
+    });
+  }
+
+  const canManage = await checkShelterEmployeePermission({
+    user: req.user,
+    shelter,
+  });
+
+  if (!canManage) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not authorized to manage this shelter.",
+    });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Image is required.",
+    });
+  }
+
+  const imageIndex = shelter.images.findIndex(
+    image => String(image._id) === req.params.imageId
+  );
+
+  if (imageIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: "Image not found.",
+    });
+  }
+
+  const oldImage = shelter.images[imageIndex];
+
+  let uploadedImage;
+
+  try {
+
+    uploadedImage = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "shelterImage",
+      originalName: req.file.originalname,
+    });
+
+    shelter.images[imageIndex] = {
+      url: uploadedImage.secure_url,
+      publicId: uploadedImage.public_id,
+    };
+
+    await shelter.save();
+
+  } catch (error) {
+
+    if (uploadedImage) {
+      try {
+        await deleteImage(uploadedImage.public_id);
+      } catch (cleanupError) {
+        console.error(cleanupError);
+      }
+    }
+
+    throw error;
+  }
+
+  try {
+    await deleteImage(oldImage.publicId);
+  } catch (error) {
+    console.error(error);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Shelter image replaced successfully.",
+    data: shelter.images[imageIndex],
+  });
+
+};
 }
 module.exports = {
   MAX_SHELTER_IMAGES,

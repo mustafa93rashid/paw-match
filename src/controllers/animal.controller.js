@@ -10,7 +10,66 @@ const { uploadBufferToCloudinary, deleteImage, deleteImages } = require("../serv
 const {
   checkAnimalMatchNotifications,
 } = require("../services/matchNotification.service");
+//============================================================
+// Check Shelter Employee Permission
+//============================================================
+const checkShelterEmployeePermission = async ({
+  //
+  // • Determines whether a user can manage a shelter
+  //   and its employees.
+  // • Grants full access to Super Admin for every shelter.
+  // • Rejects all roles except Shelter Employees.
+  // • Requires the employee to exist in the shelter's
+  //   employee list.
+  // • Requires an active Shelter Employee profile linked
+  //   to the same shelter.
+  // • Grants permission only when the employee position
+  //   is Manager.
+  // • The shelter creator does not receive permanent
+  //   permission based only on createdBy.
+  // • Supports an optional database session.
+  //============================================================
+  user,
+  shelter,
+  session = null,
+}) => {
+  if (user.role === "superadmin") {
+    return true;
+  }
 
+  if (user.role !== "shelterEmployee") {
+    return false;
+  }
+
+  const userId = user._id || user.id;
+
+  if (!userId || !shelter?._id) {
+    return false;
+  }
+
+  const existsInShelter = shelter.employees.some(
+    (employeeId) => String(employeeId) === String(userId),
+  );
+
+  if (!existsInShelter) {
+    return false;
+  }
+
+  let employeeProfileQuery = ShelterEmployeeProfile.findOne({
+    userId,
+    shelterId: shelter._id,
+    isActive: true,
+    position: "Manager",
+  });
+
+  if (session) {
+    employeeProfileQuery = employeeProfileQuery.session(session);
+  }
+
+  const employeeProfile = await employeeProfileQuery;
+
+  return Boolean(employeeProfile);
+};
 class AnimalsController {
   // ==================================================
   // Get current shelter employee profile
@@ -1214,6 +1273,94 @@ deleteAllAnimalImages = async (req, res) => {
   } catch (error) {
     throw error;
   }
+};
+replaceAnimalImage = async (req, res) => {
+
+  const animal = await Animal.findById(req.params.id);
+
+  if (!animal) {
+    return res.status(404).json({
+      success: false,
+      message: "Animal not found.",
+    });
+  }
+
+  const shelter = await Shelter.findById(animal.shelterId);
+
+  const canManage = await checkShelterEmployeePermission({
+    user: req.user,
+    shelter,
+  });
+
+  if (!canManage) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not authorized to manage this animal.",
+    });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Image is required.",
+    });
+  }
+
+  const imageIndex = animal.images.findIndex(
+    image => String(image._id) === req.params.imageId
+  );
+
+  if (imageIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: "Image not found.",
+    });
+  }
+
+  const oldImage = animal.images[imageIndex];
+
+  let uploadedImage;
+
+  try {
+
+    uploadedImage = await uploadBufferToCloudinary({
+      buffer: req.file.buffer,
+      folder: "animal",
+      originalName: req.file.originalname,
+    });
+
+    animal.images[imageIndex] = {
+      url: uploadedImage.secure_url,
+      publicId: uploadedImage.public_id,
+    };
+
+    await animal.save();
+
+  } catch (error) {
+
+    if (uploadedImage) {
+      try {
+        await deleteImage(uploadedImage.public_id);
+      } catch (cleanupError) {
+        console.error(cleanupError);
+      }
+    }
+
+    throw error;
+  }
+
+  try {
+    await deleteImage(oldImage.publicId);
+  } catch (error) {
+    console.error(error);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Animal image replaced successfully.",
+    data: animal.images[imageIndex],
+  });
+
 };
 }
 

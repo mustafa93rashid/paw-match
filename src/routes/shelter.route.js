@@ -93,4 +93,10 @@ router.delete(
   asyncHandler(shelterController.deleteAllShelterImages),
 );
 
+router.patch(
+  "/:id/images/:imageId",
+  [auth, role(["superadmin", "shelterEmployee"])],
+  uploadSingle("image"),
+  asyncHandler(shelterController.replaceShelterImage)
+);
 module.exports = router;
