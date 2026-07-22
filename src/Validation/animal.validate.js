@@ -11,6 +11,7 @@ const validate = require("../middlewares/validate");
 // • Shelter ID is optional because Shelter Employees
 //   get it automatically from their profile.
 // • Super Admin must provide the Shelter ID.
+// • Images are added later through the image routes.
 // ==================================================
 const createAnimalValidation = [
   body("name")
@@ -54,8 +55,8 @@ const createAnimalValidation = [
     .withMessage("Animal breed must be a string")
     .bail()
     .trim()
-    .isLength({ max: 100 })
-    .withMessage("Animal breed must not exceed 100 characters"),
+    .isLength({ min: 1, max: 100 })
+    .withMessage("Animal breed must be between 1 and 100 characters"),
 
   body("gender")
     .exists({ checkFalsy: true })
@@ -79,8 +80,8 @@ const createAnimalValidation = [
     .withMessage("Animal color must be a string")
     .bail()
     .trim()
-    .isLength({ max: 100 })
-    .withMessage("Animal color must not exceed 100 characters"),
+    .isLength({ min: 1, max: 100 })
+    .withMessage("Animal color must be between 1 and 100 characters"),
 
   body("healthStatus")
     .exists({ checkFalsy: true })
@@ -148,11 +149,16 @@ const createAnimalValidation = [
     .isIn(["single", "family", "any"])
     .withMessage("Owner type must be single, family, or any"),
 
-  body("requirements.isAllergic")
+  body("requirements.hypoallergenic")
     .optional()
     .isBoolean()
-    .withMessage("Is allergic must be true or false")
+    .withMessage("Hypoallergenic must be true or false")
     .toBoolean(),
+
+  body("images")
+    .not()
+    .exists()
+    .withMessage("Images must be added through the animal image endpoint"),
 
   body("isActive")
     .not()
@@ -178,9 +184,8 @@ const createAnimalValidation = [
 // • Validates only the fields included in the request.
 // • Requires at least one field to be provided.
 // • Prevents changing protected fields.
-// • Prevents changing isActive and adoptionStatus.
-// • The controller allows only Super Admin
-//   to change the Shelter ID.
+// • Images must be managed through image endpoints.
+// • Only Super Admin can change the Shelter ID.
 // ==================================================
 const updateAnimalValidation = [
   param("id")
@@ -277,20 +282,6 @@ const updateAnimalValidation = [
     .isLength({ max: 1000 })
     .withMessage("Description must not exceed 1000 characters"),
 
-  body("images")
-    .optional()
-    .isArray({ min: 1 })
-    .withMessage("At least one animal image is required"),
-
-  body("images.*")
-    .optional()
-    .isString()
-    .withMessage("Each animal image must be a string")
-    .bail()
-    .trim()
-    .notEmpty()
-    .withMessage("Animal image cannot be empty"),
-
   body("shelterId")
     .optional()
     .isMongoId()
@@ -335,11 +326,16 @@ const updateAnimalValidation = [
     .isIn(["single", "family", "any"])
     .withMessage("Owner type must be single, family, or any"),
 
-  body("requirements.isAllergic")
+  body("requirements.hypoallergenic")
     .optional()
     .isBoolean()
-    .withMessage("Is allergic must be true or false")
+    .withMessage("Hypoallergenic must be true or false")
     .toBoolean(),
+
+  body("images")
+    .not()
+    .exists()
+    .withMessage("Images must be managed through the animal image endpoints"),
 
   body("isActive")
     .not()
@@ -444,7 +440,6 @@ const getAllAnimalsValidation = [
 // Get animal by ID validation
 // ==================================================
 // • Validates the Animal ID route parameter.
-// • Used when retrieving a single animal.
 // ==================================================
 const getAnimalByIdValidation = [
   param("id")
@@ -489,6 +484,114 @@ const restoreAnimalValidation = [
   validate,
 ];
 
+// ==================================================
+// Add animal images validation
+// ==================================================
+// • Validates the Animal ID.
+// • Uploaded files are validated by Multer
+//   and the upload middleware.
+// ==================================================
+const addAnimalImagesValidation = [
+  param("id")
+    .exists({ checkFalsy: true })
+    .withMessage("Animal ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid animal ID"),
+
+  validate,
+];
+
+// ==================================================
+// Replace animal image validation
+// ==================================================
+// • Validates the Animal ID.
+// • Validates the embedded image ID.
+// • The replacement image is validated by Multer.
+// ==================================================
+const replaceAnimalImageValidation = [
+  param("id")
+    .exists({ checkFalsy: true })
+    .withMessage("Animal ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid animal ID"),
+
+  param("imageId")
+    .exists({ checkFalsy: true })
+    .withMessage("Image ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid image ID"),
+
+  validate,
+];
+
+// ==================================================
+// Set primary animal image validation
+// ==================================================
+// • Validates the Animal ID.
+// • Validates the image ID that becomes primary.
+// ==================================================
+const setPrimaryAnimalImageValidation = [
+  param("id")
+    .exists({ checkFalsy: true })
+    .withMessage("Animal ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid animal ID"),
+
+  param("imageId")
+    .exists({ checkFalsy: true })
+    .withMessage("Image ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid image ID"),
+
+  validate,
+];
+
+// ==================================================
+// Delete animal image validation
+// ==================================================
+// • Validates the Animal ID.
+// • Validates the image ID before deletion.
+// ==================================================
+const deleteAnimalImageValidation = [
+  param("id")
+    .exists({ checkFalsy: true })
+    .withMessage("Animal ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid animal ID"),
+
+  param("imageId")
+    .exists({ checkFalsy: true })
+    .withMessage("Image ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid image ID"),
+
+  validate,
+];
+
+// ==================================================
+// Delete all animal images validation
+// ==================================================
+// • Validates the Animal ID before deleting
+//   all images belonging to the animal.
+// ==================================================
+const deleteAllAnimalImagesValidation = [
+  param("id")
+    .exists({ checkFalsy: true })
+    .withMessage("Animal ID is required")
+    .bail()
+    .isMongoId()
+    .withMessage("Invalid animal ID"),
+
+  validate,
+];
+
 module.exports = {
   createAnimalValidation,
   updateAnimalValidation,
@@ -496,4 +599,9 @@ module.exports = {
   getAnimalByIdValidation,
   removeAnimalValidation,
   restoreAnimalValidation,
+  addAnimalImagesValidation,
+  replaceAnimalImageValidation,
+  setPrimaryAnimalImageValidation,
+  deleteAnimalImageValidation,
+  deleteAllAnimalImagesValidation,
 };
