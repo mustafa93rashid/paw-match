@@ -5,100 +5,188 @@ const reviewSchema = new mongoose.Schema(
     adopterId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "يجب تحديد معرف المتبني صاحب التقييم"]
+      required: [true, "Adopter ID is required"],
+      index: true,
     },
+
     targetType: {
       type: String,
       enum: {
-        values: ["Shelter", "Vet"],
-        message: "الجهة المستهدفة يجب أن تكون إما Shelter أو Vet"
+        values: ["shelter", "vet"],
+        message: "Target type must be shelter or vet",
       },
-      required: [true, "يجب تحديد نوع الجهة المقيمة"]
+      required: [true, "Target type is required"],
+      index: true,
     },
+
+    // Shelter ID when targetType is shelter.
+    // Vet User ID when targetType is vet.
     targetId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: [true, "يجب تحديد معرف الملجأ أو الطبيب البيطري"]
+      required: [true, "Target ID is required"],
+      index: true,
     },
+
+    // AdoptionRequest ID or VetAppointment ID.
     transactionId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: [true, "يجب إرفاق معرف طلب التبني أو الموعد لإثبات الأهلية"]
+      required: [true, "Transaction ID is required"],
     },
+
     rating: {
       type: Number,
-      required: [true, "التقييم الرقمي إلزامي"],
-      min: [1, "أقل تقييم هو 1 نجمة"],
-      max: [5, "أقصى تقييم هو 5 نجوم"]
+      required: [true, "Rating is required"],
+      min: [1, "Minimum rating is 1"],
+      max: [5, "Maximum rating is 5"],
     },
+
     comment: {
       type: String,
       trim: true,
-      maxlength: [500, "يجب ألا يتجاوز التعليق 500 حرف"]
+      maxlength: [500, "Comment cannot exceed 500 characters"],
+      default: "",
     },
+
     reply: {
-      text: { type: String, trim: true },
-      createdAt: { type: Date }
+      text: {
+        type: String,
+        trim: true,
+        maxlength: [500, "Reply cannot exceed 500 characters"],
+        default: null,
+      },
+      createdAt: {
+        type: Date,
+        default: null,
+      },
+      repliedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
     },
+
     status: {
       type: String,
-      enum: ["Published", "Reported", "Hidden"],
-      default: "Published"
+      enum: ["published", "reported", "hidden"],
+      default: "published",
+      index: true,
     },
+
     isEdited: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
   },
   {
-    timestamps: true
-  }
+    timestamps: true,
+  },
 );
 
-// 1. فهرس حماية فريد: يمنع المتبني برمجياً من كتابة أكثر من تقييم لنفس العملية
-reviewSchema.index({ adopterId: 1, transactionId: 1 }, { unique: true });
+// Prevent creating more than one review for the same completed transaction.
+reviewSchema.index(
+  {
+    adopterId: 1,
+    targetType: 1,
+    transactionId: 1,
+  },
+  {
+    unique: true,
+  },
+);
 
-// 2. دالة إحصائية ثابتة لحساب متوسط النجوم وتحديث البروفايل تلقائياً
-reviewSchema.statics.calcAverageRating = async function (targetId, targetType) {
+// ==================================================
+// Calculate Target Average Rating
+// ==================================================
+// • Calculates ratings from published reviews only.
+// • Separates shelter reviews from veterinarian reviews.
+// • Updates the shelter directly using the shelter ID.
+// • Updates the veterinarian profile using the veterinarian User ID.
+// ==================================================
+
+reviewSchema.statics.calcAverageRating = async function (
+  targetId,
+  targetType,
+) {
+  const objectTargetId = new mongoose.Types.ObjectId(
+    targetId,
+  );
+
   const stats = await this.aggregate([
     {
-      $match: { targetId: targetId, status: "Published" }
+      $match: {
+        targetId: objectTargetId,
+        targetType,
+        status: "published",
+      },
     },
     {
       $group: {
-        _id: "$targetId",
-        totalReviews: { $sum: 1 },
-        averageRating: { $avg: "$rating" }
-      }
-    }
+        _id: null,
+        totalReviews: {
+          $sum: 1,
+        },
+        averageRating: {
+          $avg: "$rating",
+        },
+      },
+    },
   ]);
 
-  const totalReviews = stats.length > 0 ? stats[0].totalReviews : 0;
-  // تقريب المتوسط لأقرب رقم عشري واحد (مثلاً 4.5)
-  const averageRating = stats.length > 0 ? Math.round(stats[0].averageRating * 10) / 10 : 0;
+  const totalReviews =
+    stats.length > 0 ? stats[0].totalReviews : 0;
 
-  // تحديث جدول الجهة المستهدفة تلقائياً بناءً على النوع
-  if (targetType === "Shelter") {
-    await mongoose.model("Shelter").findByIdAndUpdate(targetId, {
-      totalReviews,
-      averageRating
-    });
-  } else if (targetType === "Vet") {
-    await mongoose.model("VetProfile").findByIdAndUpdate(targetId, {
-      totalReviews,
-      averageRating
-    });
+  const averageRating =
+    stats.length > 0
+      ? Math.round(stats[0].averageRating * 10) / 10
+      : 0;
+
+  if (targetType === "shelter") {
+    await mongoose.model("Shelter").findByIdAndUpdate(
+      targetId,
+      {
+        $set: {
+          totalReviews,
+          averageRating,
+        },
+      },
+    );
+  }
+
+  if (targetType === "vet") {
+    // targetId is the User ID of the veterinarian.
+    await mongoose.model("VetProfile").findOneAndUpdate(
+      {
+        userId: targetId,
+      },
+      {
+        $set: {
+          totalReviews,
+          averageRating,
+        },
+      },
+    );
   }
 };
 
-// تشغيل حساب المتوسط فوراً بعد حفظ تقييم جديد أو تعديله
-reviewSchema.post("save", function () {
-  this.constructor.calcAverageRating(this.targetId, this.targetType);
+// Recalculate the average after creating or updating a review.
+reviewSchema.post("save", async function () {
+  await this.constructor.calcAverageRating(
+    this.targetId,
+    this.targetType,
+  );
 });
 
-// تشغيل حساب المتوسط عند حذف تقييم
-reviewSchema.post("findOneAndDelete", async function (doc) {
-  if (doc) {
-    await doc.constructor.calcAverageRating(doc.targetId, doc.targetType);
-  }
-});
+// Recalculate the average after deleting a review.
+reviewSchema.post(
+  "findOneAndDelete",
+  async function (deletedReview) {
+    if (deletedReview) {
+      await deletedReview.constructor.calcAverageRating(
+        deletedReview.targetId,
+        deletedReview.targetType,
+      );
+    }
+  },
+);
 
 module.exports = mongoose.model("Review", reviewSchema);

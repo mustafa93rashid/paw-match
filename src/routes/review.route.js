@@ -1,53 +1,27 @@
 const express = require("express");
+
 const router = express.Router();
 
-const {
-  createReview,
-  updateReview,
-  addReply,
-  getTargetReviews
-} = require("../controllers/review.controller");
+const reviewController = require("../controllers/review.controller");
+const reviewValidation = require("../validation/review.validate");
 
 const auth = require("../middlewares/auth");
 const role = require("../middlewares/role");
+const asyncHandler = require("../utils/asyncHandler");
 
-// =========================================================================
-// 1. الروابط العامة (Public Routes - لا تتطلب تسجيل دخول)
-// =========================================================================
+// Get published reviews for one shelter or veterinarian
+router.get("/target/:targetType/:targetId", [reviewValidation.getTargetReviewsValidation], asyncHandler(reviewController.getTargetReviews));
 
-// جلب كل تقييمات ملجأ أو طبيب معين (ليتمكن الزوار من قراءتها)
-router.get("/target/:targetId", getTargetReviews);
+// Get reviews created by the current adopter
+router.get("/my", [auth, role(["adopter"]), reviewValidation.getMyReviewsValidation], asyncHandler(reviewController.getMyReviews));
 
-// =========================================================================
-// 2. الروابط المحمية للمتبنين (Adopter Only Routes)
-// =========================================================================
+// Create a review after a completed adoption request or vet appointment
+router.post("/", [auth, role(["adopter"]), reviewValidation.createReviewValidation], asyncHandler(reviewController.createReview));
 
-// إضافة تقييم جديد (يتطلب تسجيل دخول + صلاحية متبنٍ فقط)
-router.post(
-  "/",
-  auth,
-  role("Adopter"),
-  createReview
-);
+// Update the adopter review within 48 hours
+router.put("/:id", [auth, role(["adopter"]), reviewValidation.updateReviewValidation], asyncHandler(reviewController.updateReview));
 
-// تعديل تقييم قائم خلال 48 ساعة (يتطلب تسجيل دخول + صلاحية متبنٍ فقط)
-router.put(
-  "/:id",
-  auth,
-  role("Adopter"),
-  updateReview
-);
-
-// =========================================================================
-// 3. الروابط المحمية للملاجئ والأطباء (Shelter & Vet Only Routes)
-// =========================================================================
-
-// إضافة الرد الرسمي الوحيد على التقييم
-router.put(
-  "/:id/reply",
-  auth,
-  role("Shelter", "Vet"), // يُسمح للملجأ أو الطبيب فقط بالرد
-  addReply
-);
+// Add an official reply from the shelter employee or veterinarian
+router.put("/:id/reply", [auth, role(["shelterEmployee", "vet"]), reviewValidation.addReplyValidation], asyncHandler(reviewController.addReply));
 
 module.exports = router;
