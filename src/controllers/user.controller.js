@@ -5,7 +5,19 @@ const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
 
 const passwordService = require("../utils/passwordService");
 
-const {uploadBufferToCloudinary,deleteImage} = require("../services/cloudinary.service");
+const { uploadBufferToCloudinary, deleteImage } = require("../services/cloudinary.service");
+
+const SignupVerification = require("../models/SignupVerification");
+const emailService = require("../services/email.service");
+const cookiesService = require("../utils/cookiesService");
+
+const {
+  generateVerificationCode,
+  hashVerificationCode,
+  verifyVerificationCode,
+} = require("../utils/verificationCodeService");
+
+const MAX_VERIFICATION_ATTEMPTS = 5;
 
 // ==================================================
 // Allowed user roles
@@ -513,6 +525,253 @@ class UserController {
       message: "Profile updated successfully",
       data: sanitizeUser(user),
     });
+  };
+
+  // ==================================================
+  // Request current user email update
+  // ==================================================
+  requestEmailUpdate = async (req, res) => {
+    // • Receives the new email address.
+    // • Ensures the email is not already registered.
+    // • Generates and sends a verification code.
+    // • Does not update the user's email at this stage.
+    // ==================================================
+
+    const { newEmail } = req.body;
+
+    const currentUserId = this.getCurrentUserId(req);
+
+    const normalizedEmail = newEmail.trim().toLowerCase();
+
+    const user = await User.findById(currentUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Prevent requesting the current email
+    if (user.email.toLowerCase() === normalizedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "New email must be different from current email",
+      });
+    }
+
+    // Ensure the new email is not used by another account
+    const emailExists = await User.exists({
+      email: normalizedEmail,
+      _id: { $ne: currentUserId },
+    });
+
+    if (emailExists) {
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+      });
+    }
+
+    // Remove any previous pending email-update request
+    await SignupVerification.deleteMany({
+      userId: currentUserId,
+      purpose: "update_email",
+    });
+
+    // Generate and hash the verification code
+    const verificationCode = generateVerificationCode();
+
+    const hashedVerificationCode =
+      hashVerificationCode(verificationCode);
+
+    const verificationCodeExpires = new Date(
+      Date.now() + 10 * 60 * 1000,
+    );
+
+    const expiresAt = new Date(
+      Date.now() + 15 * 60 * 1000,
+    );
+
+    // Store the email-update request temporarily
+    await SignupVerification.create({
+      userId: currentUserId,
+      email: normalizedEmail,
+      purpose: "update_email",
+      verificationCode: hashedVerificationCode,
+      verificationCodeExpires,
+      verificationAttempts: 0,
+      expiresAt,
+    });
+
+    // Send the verification code to the new email
+    await emailService.sendEmailUpdateVerificationEmail({
+      to: normalizedEmail,
+      firstName: user.firstName,
+      verificationCode,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification code sent to the new email address",
+      data: {
+        email: normalizedEmail,
+        expiresInMinutes: 10,
+      },
+    });
+  };
+
+  // ==================================================
+  // Verify and update current user email
+  // ==================================================
+  verifyEmailUpdate = async (req, res) => {
+    // • Verifies the code sent to the new email.
+    // • Ensures the email is still available.
+    // • Updates the account email only after verification.
+    // • Deletes the temporary request after completion.
+    // ==================================================
+
+    const { verificationCode } = req.body;
+
+    const currentUserId = this.getCurrentUserId(req);
+
+    const verificationRequest =
+      await SignupVerification.findOne({
+        userId: currentUserId,
+        purpose: "update_email",
+      }).select(
+        "+verificationCode +verificationCodeExpires +verificationAttempts",
+      );
+
+    if (!verificationRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Email update request not found or expired",
+      });
+    }
+
+    // Check verification code expiration
+    if (
+      !verificationRequest.verificationCodeExpires ||
+      verificationRequest.verificationCodeExpires.getTime() <
+      Date.now()
+    ) {
+      await SignupVerification.findByIdAndDelete(
+        verificationRequest._id,
+      );
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Verification code has expired. Please request a new code",
+      });
+    }
+
+    // Limit invalid attempts
+    if (
+      verificationRequest.verificationAttempts >=
+      MAX_VERIFICATION_ATTEMPTS
+    ) {
+      await SignupVerification.findByIdAndDelete(
+        verificationRequest._id,
+      );
+
+      return res.status(429).json({
+        success: false,
+        message:
+          "Too many invalid attempts. Please request a new code",
+      });
+    }
+
+    const isValidCode = verifyVerificationCode(
+      verificationCode,
+      verificationRequest.verificationCode,
+    );
+
+    if (!isValidCode) {
+      verificationRequest.verificationAttempts += 1;
+
+      await verificationRequest.save({
+        validateBeforeSave: false,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification code",
+        remainingAttempts:
+          MAX_VERIFICATION_ATTEMPTS -
+          verificationRequest.verificationAttempts,
+      });
+    }
+
+    // Ensure the new email is still available
+    const emailExists = await User.exists({
+      email: verificationRequest.email,
+      _id: { $ne: currentUserId },
+    });
+
+    if (emailExists) {
+      await SignupVerification.findByIdAndDelete(
+        verificationRequest._id,
+      );
+
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+      });
+    }
+
+    try {
+      const updatedUser = await User.findByIdAndUpdate(
+        currentUserId,
+        {
+          $set: {
+            email: verificationRequest.email,
+            isEmailVerified: true,
+          },
+        },
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
+
+      if (!updatedUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      // Remove the temporary request after success
+      await SignupVerification.findByIdAndDelete(
+        verificationRequest._id,
+      );
+
+      // Force the user to sign in again
+      cookiesService.clearTokens(res);
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Email updated successfully. Please sign in again.",
+        data: sanitizeUser(updatedUser),
+      });
+    } catch (error) {
+      // Handle a duplicate email caused by simultaneous requests
+      if (error.code === 11000) {
+        await SignupVerification.findByIdAndDelete(
+          verificationRequest._id,
+        );
+
+        return res.status(409).json({
+          success: false,
+          message: "Email is already registered",
+        });
+      }
+
+      throw error;
+    }
   };
 
   // ==================================================

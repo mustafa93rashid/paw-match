@@ -24,6 +24,9 @@ const passwordRules = (field, label = "Password") =>
       `${label} must contain at least 8 characters, one uppercase letter, one lowercase letter, one number, and one symbol`,
     );
 
+// ==================================================
+// Signup validation
+// ==================================================
 const signupValidation = [
   body("firstName")
     .trim()
@@ -73,107 +76,9 @@ const signupValidation = [
   validate,
 ];
 
-const signinValidation = [
-  body("email")
-    .trim()
-    .notEmpty()
-    .withMessage("Email is required")
-    .bail()
-    .isEmail()
-    .withMessage("Invalid email or password")
-    .bail()
-    .normalizeEmail(),
-
-  body("password")
-    .notEmpty()
-    .withMessage("Password is required")
-    .bail()
-    .isString()
-    .withMessage("Invalid email or password"),
-
-  validate,
-];
-
-const changePasswordValidation = [
-  body("currentPassword")
-    .notEmpty()
-    .withMessage("Current password is required")
-    .bail()
-    .isString()
-    .withMessage("Current password must be string"),
-
-  passwordRules("newPassword", "New password"),
-
-  body("confirmNewPassword")
-    .notEmpty()
-    .withMessage("Password confirmation is required")
-    .bail()
-    .custom((value, { req }) => {
-      if (value !== req.body.newPassword) {
-        throw new Error("Password confirmation does not match");
-      }
-
-      return true;
-    }),
-
-  validate,
-];
-
-const forgotPasswordValidation = [
-  body("email")
-    .trim()
-    .notEmpty()
-    .withMessage("Email is required")
-    .bail()
-    .isEmail()
-    .withMessage("Please provide a valid email address")
-    .bail()
-    .normalizeEmail(),
-
-  validate,
-];
-
-const resetPasswordValidation = [
-  param("token")
-    .trim()
-    .notEmpty()
-    .withMessage("Reset token is required"),
-
-  body("newPassword")
-    .notEmpty()
-    .withMessage("New password is required")
-    .bail()
-    .isString()
-    .withMessage("New password must be a string")
-    .bail()
-    .isStrongPassword({
-      minLength: 8,
-      minNumbers: 1,
-      minUppercase: 1,
-      minLowercase: 1,
-      minSymbols: 1,
-    })
-    .withMessage(
-      "New password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number, and one symbol",
-    ),
-
-  body("confirmPassword")
-    .notEmpty()
-    .withMessage("Password confirmation is required")
-    .bail()
-    .custom((value, { req }) => {
-      if (value !== req.body.newPassword) {
-        throw new Error(
-          "Password confirmation does not match the new password",
-        );
-      }
-
-      return true;
-    }),
-
-  validate,
-];
-
+// ==================================================
+// Verify signup validation
+// ==================================================
 const verifySignupValidation = [
   body("email")
     .exists()
@@ -205,11 +110,179 @@ const verifySignupValidation = [
   validate,
 ];
 
+// ==================================================
+// Sign in validation
+// ==================================================
+const signinValidation = [
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Email is required")
+    .bail()
+    .isEmail()
+    .withMessage("Invalid email or password")
+    .bail()
+    .normalizeEmail(),
+
+  body("password")
+    .notEmpty()
+    .withMessage("Password is required")
+    .bail()
+    .isString()
+    .withMessage("Invalid email or password"),
+
+  validate,
+];
+
+// ==================================================
+// Change password validation
+// ==================================================
+const changePasswordValidation = [
+  body("currentPassword")
+    .notEmpty()
+    .withMessage("Current password is required")
+    .bail()
+    .isString()
+    .withMessage("Current password must be string"),
+
+  passwordRules("newPassword", "New password"),
+
+  body("confirmNewPassword")
+    .notEmpty()
+    .withMessage("Password confirmation is required")
+    .bail()
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error("Password confirmation does not match");
+      }
+
+      return true;
+    }),
+
+  validate,
+];
+
+// ==================================================
+// Forgot password validation
+// ==================================================
+const forgotPasswordValidation = [
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Email is required")
+    .bail()
+    .isEmail()
+    .withMessage("Please provide a valid email address")
+    .bail()
+    .normalizeEmail(),
+
+  validate,
+];
+
+// ==================================================
+// Reset password validation
+// ==================================================
+const resetPasswordValidation = [
+  param("token")
+    .trim()
+    .notEmpty()
+    .withMessage("Reset token is required"),
+
+  passwordRules("newPassword", "New password"),
+
+  body("confirmPassword")
+    .notEmpty()
+    .withMessage("Password confirmation is required")
+    .bail()
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error(
+          "Password confirmation does not match the new password",
+        );
+      }
+
+      return true;
+    }),
+
+  validate,
+];
+
+// ==================================================
+// Request email update validation
+// ==================================================
+const requestEmailUpdateValidation = [
+  body("newEmail")
+    .exists()
+    .withMessage("New email is required")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("New email cannot be empty")
+    .bail()
+    .isEmail()
+    .withMessage("Please provide a valid email address")
+    .bail()
+    .normalizeEmail()
+    .custom(async (value, { req }) => {
+      const currentUserId = req.user?._id || req.user?.id;
+
+      const emailExists = await User.exists({
+        email: value,
+        ...(currentUserId && {
+          _id: {
+            $ne: currentUserId,
+          },
+        }),
+      });
+
+      if (emailExists) {
+        throw new Error("This email already exists");
+      }
+
+      const currentUser = currentUserId
+        ? await User.findById(currentUserId).select("email")
+        : null;
+
+      if (currentUser && currentUser.email === value) {
+        throw new Error(
+          "New email must be different from current email",
+        );
+      }
+
+      return true;
+    }),
+
+  validate,
+];
+
+// ==================================================
+// Verify email update validation
+// ==================================================
+const verifyEmailUpdateValidation = [
+  body("verificationCode")
+    .exists()
+    .withMessage("Verification code is required")
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage("Verification code cannot be empty")
+    .bail()
+    .isLength({ min: 6, max: 6 })
+    .withMessage("Verification code must be exactly 6 digits")
+    .bail()
+    .isNumeric()
+    .withMessage("Verification code must contain numbers only"),
+
+  validate,
+];
+
 module.exports = {
   signupValidation,
+  verifySignupValidation,
   signinValidation,
   changePasswordValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
-  verifySignupValidation,
+  requestEmailUpdateValidation,
+  verifyEmailUpdateValidation,
 };

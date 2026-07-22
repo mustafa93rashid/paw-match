@@ -11,7 +11,7 @@ const signupLimiter = rateLimit({
 
 const signinLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 25, 
+  limit: 25,
   message: {
     success: false,
     message: "Too many signin attempts, please try again after 1 hour",
@@ -28,8 +28,29 @@ const verifySignupLimiter = rateLimit({
   },
 });
 
+const requestEmailUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  message: {
+    success: false,
+    message: "Too many email update requests. Please try again later.",
+  },
+});
+
+const verifyEmailUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: {
+    success: false,
+    message:
+      "Too many email verification attempts. Please try again later.",
+  },
+});
+
 module.exports = {
   signupLimiter,
   signinLimiter,
   verifySignupLimiter,
+  requestEmailUpdateLimiter,
+  verifyEmailUpdateLimiter,
 };

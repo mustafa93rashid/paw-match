@@ -4,7 +4,8 @@
   "description": "",
   "main": "./src/app.js",
   "scripts": {
-    "watch": "nodemon ./src/app.js"
+    "watch": "nodemon ./src/app.js",
+    "seed": "node ./src/seed.js"
   },
   "keywords": [],
   "author": "",

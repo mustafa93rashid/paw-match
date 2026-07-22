@@ -88,20 +88,23 @@ const animalSchema = new mongoose.Schema(
       default: null,
     },
 
-images: [
-  {
-    url: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    publicId: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-  },
-],
+    images: [
+      {
+        url: {
+          type: String,
+          required: true,
+        },
+        publicId: {
+          type: String,
+          required: true,
+        },
+        isPrimary: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+    
     adoptionStatus: {
       type: String,
       enum: {

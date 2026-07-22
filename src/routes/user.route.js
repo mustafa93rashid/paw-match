@@ -7,7 +7,9 @@ const role = require("../middlewares/role");
 const auth = require("../middlewares/auth");
 const { uploadSingle } = require("../middlewares/upload.middleware");
 
-const {updateProfileValidation,updateUserRoleValidation, updateStatusValidation, createUserByAdminValidation} = require("../validation/userManagement.validate");
+const { updateProfileValidation, updateUserRoleValidation, updateStatusValidation, createUserByAdminValidation } = require("../validation/userManagement.validate");
+const { verifyEmailUpdateValidation, requestEmailUpdateValidation } = require("../validation/auth.validate");
+const { requestEmailUpdateLimiter, verifyEmailUpdateLimiter } = require("../middlewares/limiter");
 
 // Get current user profile
 router.get("/profile", [auth], asyncHandler(userController.profile));
@@ -31,12 +33,18 @@ router.put("/:id/status", [auth, role(["superadmin"]), updateStatusValidation], 
 router.get("/:id", [auth, role(["superadmin"])], asyncHandler(userController.getOne));
 
 // Upload, replace, and delete profile image
-router.patch("/profile/image",[auth, uploadSingle("image")],asyncHandler(userController.uploadProfileImage));
+router.patch("/profile/image", [auth, uploadSingle("image")], asyncHandler(userController.uploadProfileImage));
 
 // Replace profile image
-router.patch("/profile/image/replace",[auth, uploadSingle("image")],asyncHandler(userController.replaceProfileImage));
+router.patch("/profile/image/replace", [auth, uploadSingle("image")], asyncHandler(userController.replaceProfileImage));
 
 // Delete profile image
-router.delete("/profile/image",[auth],asyncHandler(userController.deleteProfileImage));
+router.delete("/profile/image", [auth], asyncHandler(userController.deleteProfileImage));
+
+// 
+router.post("/profile/email/request", [auth, requestEmailUpdateLimiter], requestEmailUpdateValidation, asyncHandler(userController.requestEmailUpdate));
+
+// 
+router.post("/profile/email/verify", [auth, verifyEmailUpdateLimiter], verifyEmailUpdateValidation, asyncHandler(userController.verifyEmailUpdate));
 
 module.exports = router;
