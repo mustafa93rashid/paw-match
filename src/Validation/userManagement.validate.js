@@ -6,7 +6,7 @@ const validate = require("../middlewares/validate");
 // Reusable values
 // ==================================================
 
-const USER_ROLES = ["shelterEmployee", "vet", "adopter"];
+const USER_ROLES = ["superadmin", "shelterEmployee", "vet", "adopter"];
 
 const PROFILE_FIELDS = [
   "firstName",

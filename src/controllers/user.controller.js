@@ -22,7 +22,7 @@ const MAX_VERIFICATION_ATTEMPTS = 5;
 // ==================================================
 // Allowed user roles
 // ==================================================
-const ALLOWED_USER_ROLES = ["adopter", "shelterEmployee", "vet"];
+const ALLOWED_USER_ROLES = ["superadmin", "adopter", "shelterEmployee", "vet"];
 
 // ==================================================
 // User profile editable fields
