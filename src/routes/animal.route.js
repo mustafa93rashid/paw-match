@@ -4,7 +4,7 @@ const router = express.Router();
 const { uploadSingle, uploadArray } = require("../middlewares/upload.middleware");
 
 const animalController = require("../controllers/animal.controller");
-const animalValidation = require("../Validation/animal.validate");
+const animalValidation = require("../validation/animal.validate");
 
 const asyncHandler = require("../utils/asyncHandler");
 const auth = require("../middlewares/auth");
