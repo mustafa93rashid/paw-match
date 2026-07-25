@@ -34,6 +34,7 @@ const ReviewFormPage = () => {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ReviewFormValues>({ resolver: zodResolver(reviewFormSchema) });
 
@@ -260,7 +261,7 @@ const ReviewFormPage = () => {
               </p>
             )}
 
-            <StarRatingInput register={register} error={errors.rating?.message} />
+            <StarRatingInput control={control} error={errors.rating?.message} />
 
             <Textarea
               label="Your review (optional)"
