@@ -10,92 +10,69 @@ const MAX_VERIFICATION_ATTEMPTS = 5;
 
 class AuthController {
 // ==================== Register New User ====================
-signup = async (req, res) => {
-  const { firstName, lastName, email, password } = req.body;
+  signup = async (req, res) => {
+    const { firstName, lastName, email, password } = req.body;
 
-  const existingUser = await User.findOne({ email });
+    // Check if the email is already registered
+    const existingUser = await User.findOne({ email });
 
-  if (existingUser) {
-    return res.status(409).json({
-      success: false,
-      message: "Email is already registered",
-    });
-  }
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+      });
+    }
 
-  const verificationCode = generateVerificationCode();
+    // Generate verification code
+    const verificationCode = generateVerificationCode();
 
-  const hashedPassword = await passwordService.hash(password);
-  const hashedVerificationCode = hashVerificationCode(verificationCode);
+    // Hash sensitive data
+    const hashedPassword = await passwordService.hash(password);
+    const hashedVerificationCode = hashVerificationCode(verificationCode);
 
-  const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    // Expiration dates
+    const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
 
-  await SignupVerification.findOneAndUpdate(
-    { email },
-    {
-      $set: {
-        firstName,
-        lastName,
-        email,
-        password: hashedPassword,
-        verificationCode: hashedVerificationCode,
-        verificationCodeExpires,
-        verificationAttempts: 0,
-        expiresAt,
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Save or update the temporary signup request
+    await SignupVerification.findOneAndUpdate(
+      { email },
+      {
+        $set: {
+          firstName,
+          lastName,
+          email,
+          password: hashedPassword,
+          verificationCode: hashedVerificationCode,
+          verificationCodeExpires,
+          verificationAttempts: 0,
+          expiresAt,
+        },
       },
-    },
-    {
-      upsert: true,
-      returnDocument: "after",
-      runValidators: true,
-    },
-  );
+      {
+        upsert: true,
+        returnDocument: "after",
+        runValidators: true,
+      },
+    );
 
-  try {
-    console.log("Sending signup verification email to:", email);
-
+    // Send verification code
     await emailService.sendSignupVerificationEmail({
       to: email,
       firstName,
       verificationCode,
     });
 
-    console.log("Signup verification email sent to:", email);
-  } catch (error) {
-    console.error(
-      "========== SIGNUP EMAIL ERROR ==========",
-    );
-
-    console.error({
-      message: error.message,
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode,
-      errno: error.errno,
-      syscall: error.syscall,
-      address: error.address,
-      port: error.port,
-      stack: error.stack,
+    return res.status(200).json({
+      success: true,
+      message: "Verification code sent successfully",
+      data: {
+        email,
+        expiresInMinutes: 10,
+      },
     });
-
-    await SignupVerification.deleteOne({ email });
-
-    return res.status(503).json({
-      success: false,
-      message: "Unable to send verification email. Please try again later",
-    });
-  }
-
-  return res.status(200).json({
-    success: true,
-    message: "Verification code sent successfully",
-    data: {
-      email,
-      expiresInMinutes: 10,
-    },
-  });
-};
+  };
 
 // ==================== Verify Signup ====================
   verifySignup = async (req, res) => {
