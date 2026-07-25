@@ -1,7 +1,13 @@
-const cookieConfig = {
+const isProduction = process.env.NODE_ENV === "production";
+
+const baseCookieConfig = {
   httpOnly: true,
-  secure: false,
-  sameSite: "strict",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+};
+
+const cookieConfig = {
+  ...baseCookieConfig,
   maxAge: 15 * 60 * 1000, // 15 minutes
 };
 
@@ -15,23 +21,19 @@ class CookiesService {
   };
 
   clearData = (res, key) => {
-    res.clearCookie(key);
+    res.clearCookie(key, baseCookieConfig);
   };
 
   setAccessToken = (res, value) => {
     res.cookie("accessToken", value, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "strict",
+      ...baseCookieConfig,
       maxAge: 60 * 60 * 1000, // 1 hour
     });
   };
 
   setRefreshToken = (res, value) => {
     res.cookie("refreshToken", value, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "strict",
+      ...baseCookieConfig,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
   };
