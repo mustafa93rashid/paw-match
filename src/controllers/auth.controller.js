@@ -62,11 +62,21 @@ signup = async (req, res) => {
 
     console.log("Signup verification email sent to:", email);
   } catch (error) {
-    console.error("Signup verification email failed:", {
+    console.error(
+      "========== SIGNUP EMAIL ERROR ==========",
+    );
+
+    console.error({
       message: error.message,
       code: error.code,
       command: error.command,
       response: error.response,
+      responseCode: error.responseCode,
+      errno: error.errno,
+      syscall: error.syscall,
+      address: error.address,
+      port: error.port,
+      stack: error.stack,
     });
 
     await SignupVerification.deleteOne({ email });
