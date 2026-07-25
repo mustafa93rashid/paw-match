@@ -29,7 +29,7 @@ app.use(
       "http://localhost:5173",
       "http://localhost:5174",
       "https://paw-match-dashboard.onrender.com",
-      "https://paw-match-frontend.onrender.com",
+      "https://paw-match-tnzt.onrender.com",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
