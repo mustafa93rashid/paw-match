@@ -5,6 +5,7 @@ const http = require("http");
 const mongoose = require("mongoose");
 const cookies = require("cookie-parser");
 const morgan = require("morgan");
+const cors = require("cors");
 
 const { initSocket } = require("./utils/socket");
 
@@ -22,7 +23,7 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookies());
 app.use(xssSanitize);
-
+app.use(cors());
 //=========================================================================
 // API Routes
 //=========================================================================
