@@ -81,7 +81,7 @@ class AuthController {
     const signupRequest = await SignupVerification.findOne({
       email,
     }).select(
-      "+verificationCode +verificationCodeExpires +verificationAttempts",
+      "+password +verificationCode +verificationCodeExpires +verificationAttempts",
     );
 
     // Check if the temporary signup request exists
@@ -208,6 +208,13 @@ class AuthController {
       return res.status(403).json({
         success: false,
         message: "Account is inactive",
+      });
+    }
+
+    if (!user.isAccountActivated) {
+      return res.status(403).json({
+        success: false,
+        message: "Please activate your account. Check your email for the activation link.",
       });
     }
 
@@ -404,6 +411,11 @@ class AuthController {
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
 
+    // Forgot Password is a completely independent process from Account
+    // Activation — this endpoint assumes the account is already activated
+    // and never touches isAccountActivated or activationToken/
+    // activationTokenExpires. An unactivated account must use the
+    // dedicated /auth/activate-account/:token flow instead.
     await user.save();
 
     // Clear authentication cookies
@@ -412,6 +424,61 @@ class AuthController {
     return res.status(200).json({
       success: true,
       message: "Password reset successfully. Please sign in again.",
+    });
+  };
+
+// ==================== Activate Account (Staff-Application-Approved Users) ====================
+  activateAccount = async (req, res) => {
+    // Deliberately independent of resetPassword: separate token fields
+    // (activationToken/activationTokenExpires, never passwordResetToken/
+    // passwordResetExpires), separate endpoint, separate semantics. A
+    // password-reset token can never activate an account, and an
+    // activation token can never be used to reset an already-active
+    // account's password.
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    // Hash the received token
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Find the user with a valid activation token. Deliberately no isActive
+    // filter here (unlike resetPassword) — isActive and isAccountActivated
+    // are separate axes, and this endpoint's whole purpose is to flip the
+    // latter for the first time.
+    const user = await User.findOne({
+      activationToken: hashedToken,
+      activationTokenExpires: {
+        $gt: Date.now(),
+      },
+    }).select("+password");
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired activation link",
+      });
+    }
+
+    if (user.isAccountActivated) {
+      return res.status(400).json({
+        success: false,
+        message: "This account has already been activated. Please sign in.",
+      });
+    }
+
+    // Set the applicant's own password and activate the account
+    user.password = await passwordService.hash(newPassword);
+
+    user.isAccountActivated = true;
+
+    user.activationToken = undefined;
+    user.activationTokenExpires = undefined;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Account activated successfully. Please sign in.",
     });
   };
 
@@ -441,6 +508,13 @@ class AuthController {
       return res.status(403).json({
         success: false,
         message: "Account is inactive",
+      });
+    }
+
+    if (!user.isAccountActivated) {
+      return res.status(403).json({
+        success: false,
+        message: "Please activate your account. Check your email for the activation link.",
       });
     }
 

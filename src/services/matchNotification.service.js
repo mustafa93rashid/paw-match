@@ -4,8 +4,6 @@ const Notification = require("../models/Notification");
 
 const { calculateAnimalMatch } = require("./matching.service");
 
-const { getIO } = require("../config/socket");
-
 const MATCH_NOTIFICATION_THRESHOLD = 75;
 
 /*
@@ -91,7 +89,21 @@ const checkAnimalMatchNotifications = async (animalId) => {
     }
 
     try {
-      const notification = await Notification.create({
+      // Real-time push was previously attempted here via
+      // config/socket.js's getIO(), but that module's initializeSocket()
+      // is never called anywhere in app.js (app.js wires up the unrelated,
+      // no-op utils/socket.js instead), so getIO() always threw
+      // "Socket.IO has not been initialized" — every call landed in the
+      // catch below, silently discarding the error and leaving the
+      // Notification document as the only durable record of the match.
+      // The frontend (see @paw-match/hooks's notifications.ts) also never
+      // connects a socket client at all, by deliberate design: this app's
+      // access token is httpOnly-cookie-only and is never exposed to
+      // client-side JS, so there's no token available to satisfy
+      // config/socket.js's required `socket.handshake.auth.token`. Delivery
+      // is therefore API-only — the adopter-facing notification hooks poll
+      // GET /notifications/unread-count on an interval and on window focus.
+      await Notification.create({
         recipientId: adopter.userId,
         senderId: null,
         type: "animalMatch",
@@ -102,13 +114,6 @@ const checkAnimalMatchNotifications = async (animalId) => {
         metadata: {
           matchPercentage: matchResult.matchPercentage,
         },
-      });
-
-      // Send the notification immediately to all
-      // active devices connected by this adopter.
-      getIO().to(`user:${adopter.userId.toString()}`).emit("notification:new", {
-        success: true,
-        data: notification,
       });
     } catch (error) {
       // A unique database index remains the final

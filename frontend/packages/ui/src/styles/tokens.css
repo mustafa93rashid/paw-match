@@ -1,0 +1,35 @@
+/**
+ * Shared design tokens (Tailwind CSS v4 CSS-first theme).
+ * Consumed by every app via `@import "@paw-match/ui/tokens.css";`
+ * placed after `@import "tailwindcss";` in each app's entry stylesheet.
+ *
+ * Palette: warm "brand" orange for primary actions/energy, cool "accent"
+ * teal for secondary emphasis. Both scales were chosen so that the 600/700
+ * steps carry white text at a comfortable contrast ratio for buttons/badges.
+ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --color-brand-50: #fff4ed;
+  --color-brand-100: #ffe4d3;
+  --color-brand-200: #ffc5a1;
+  --color-brand-300: #ff9d68;
+  --color-brand-400: #ff7a3d;
+  --color-brand-500: #f8591a;
+  --color-brand-600: #e0430f;
+  --color-brand-700: #b8330d;
+  --color-brand-800: #932913;
+  --color-brand-900: #782513;
+
+  --color-accent-50: #effcfa;
+  --color-accent-100: #d1f5ee;
+  --color-accent-200: #a3e9de;
+  --color-accent-300: #6bd6c9;
+  --color-accent-400: #3bbbb0;
+  --color-accent-500: #219a92;
+  --color-accent-600: #197b76;
+  --color-accent-700: #17635f;
+  --color-accent-800: #164f4d;
+  --color-accent-900: #154240;
+}

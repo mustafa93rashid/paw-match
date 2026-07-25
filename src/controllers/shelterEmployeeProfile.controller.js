@@ -137,6 +137,84 @@ class ShelterEmployeeProfileController {
   };
 
   // ==================================================
+  // Search available (unassigned) shelter employees
+  // ==================================================
+  getAvailableEmployees = async (req, res) => {
+    // ==================================================
+    // • Accessible to Super Admin, or any shelterEmployee
+    //   with an active Manager profile (for any shelter —
+    //   the results themselves are never shelter-scoped,
+    //   since an unassigned employee belongs to none).
+    // • Returns only active, unassigned (shelterId: null)
+    //   shelterEmployee accounts.
+    // • Returns a limited, safe field set only — never
+    //   password/security fields.
+    // • Supports an optional case-insensitive name/email
+    //   search.
+    // ==================================================
+
+    if (req.user.role === "shelterEmployee") {
+      const managerProfile = await ShelterEmployeeProfile.findOne({
+        userId: req.user._id,
+        isActive: true,
+      });
+
+      const isManager =
+        managerProfile &&
+        String(managerProfile.position).toLowerCase() === "manager";
+
+      if (!isManager) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not allowed to search for shelter employees",
+        });
+      }
+    }
+
+    const profiles = await ShelterEmployeeProfile.find({
+      shelterId: null,
+      isActive: true,
+    }).populate(
+      "userId",
+      "firstName lastName email phone profileImage role isActive",
+    );
+
+    let results = profiles
+      .filter(
+        (profile) =>
+          profile.userId &&
+          profile.userId.role === "shelterEmployee" &&
+          profile.userId.isActive,
+      )
+      .map((profile) => ({
+        _id: profile.userId._id,
+        firstName: profile.userId.firstName,
+        lastName: profile.userId.lastName,
+        email: profile.userId.email,
+        phone: profile.userId.phone,
+        profileImage: profile.userId.profileImage,
+      }));
+
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+
+    if (search) {
+      results = results.filter(
+        (user) =>
+          `${user.firstName} ${user.lastName}`.toLowerCase().includes(search) ||
+          user.email.toLowerCase().includes(search),
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Available shelter employees retrieved successfully",
+      count: results.length,
+      data: results,
+    });
+  };
+
+  // ==================================================
   // Get shelter employee profile by User ID
   // ==================================================
   getOne = async (req, res) => {

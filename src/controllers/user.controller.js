@@ -2,6 +2,7 @@ const User = require("../models/User");
 const AdopterProfile = require("../models/AdopterProfile");
 const VetProfile = require("../models/VetProfile");
 const ShelterEmployeeProfile = require("../models/ShelterEmployeeProfile");
+const Shelter = require("../models/Shelter");
 
 const passwordService = require("../utils/passwordService");
 
@@ -314,6 +315,25 @@ class UserController {
       }
 
       throw error;
+    }
+
+    // The role profile backing shelter/vet membership is already gone (via
+    // deleteRoleProfile above) — a shelterEmployee or vet who no longer
+    // holds that role has no business staying in a shelter's employees
+    // array either. Best-effort: a cleanup failure here must never undo the
+    // already-successful role change.
+    if (["shelterEmployee", "vet"].includes(previousRole)) {
+      try {
+        await Shelter.updateMany(
+          { employees: user._id },
+          { $pull: { employees: user._id } },
+        );
+      } catch (cleanupError) {
+        console.error(
+          "Failed to remove user from shelter employees after role change:",
+          cleanupError.message,
+        );
+      }
     }
 
     return res.status(200).json({

@@ -65,6 +65,9 @@ app.use("/api/v1/reviews", require("./routes/review.route"));
 // Notification routes
 app.use("/api/v1/notifications", require("./routes/notification.routes"));
 
+// Staff Application routes (public applications + Super Admin review)
+app.use("/api/v1/staff-applications", require("./routes/staffApplication.route"));
+
 //=========================================================================
 // Error Handling Middleware
 //=========================================================================

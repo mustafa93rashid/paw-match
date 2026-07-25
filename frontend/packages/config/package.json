@@ -1,0 +1,10 @@
+{
+  "name": "@paw-match/config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.js",
+  "exports": {
+    "./prettier": "./src/prettier.config.cjs",
+    "./tailwind-preset": "./src/tailwind-preset.cjs"
+  }
+}
