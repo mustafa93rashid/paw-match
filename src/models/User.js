@@ -74,6 +74,33 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    // False only for accounts created by staff-application approval, until
+    // the applicant sets their own password through the activation link.
+    // Every other creation path (self-signup, Super Admin create-user)
+    // relies on the default and is unaffected.
+    isAccountActivated: {
+      type: Boolean,
+      default: true,
+    },
+
+    // Dedicated activation token — deliberately separate from
+    // passwordResetToken/passwordResetExpires. Account Activation and
+    // Forgot Password are different business processes; sharing one pair
+    // of fields between them made it impossible to tell which flow a given
+    // token belonged to. Same hashed-token-with-expiry shape and security
+    // properties as the password-reset pair, just not shared with it.
+    activationToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    activationTokenExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   {
     timestamps: true,

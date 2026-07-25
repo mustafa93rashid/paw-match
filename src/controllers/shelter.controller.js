@@ -61,7 +61,6 @@ const checkShelterEmployeePermission = async ({
     userId,
     shelterId: shelter._id,
     isActive: true,
-    position: "Manager",
   });
 
   if (session) {
@@ -70,7 +69,11 @@ const checkShelterEmployeePermission = async ({
 
   const employeeProfile = await employeeProfileQuery;
 
-  return Boolean(employeeProfile);
+  if (!employeeProfile) {
+    return false;
+  }
+
+  return String(employeeProfile.position).toLowerCase() === "manager";
 };
 
 class ShelterController {
@@ -514,11 +517,32 @@ class ShelterController {
 
         const reviews = await this.getShelterReviews(shelter._id);
 
+        // Additive only: a shelterEmployee has no accessible endpoint to
+        // look up a teammate's position (GET /shelter-employee-profile is
+        // superadmin-only), so the Manage Team UI can't show Manager/
+        // Employee badges without this. Vets have no ShelterEmployeeProfile
+        // — their entry's position stays null.
+        const teamProfiles = await ShelterEmployeeProfile.find({
+          shelterId: shelter._id,
+        }).select("userId position");
+
+        const positionByUserId = new Map(
+          teamProfiles.map((profile) => [String(profile.userId), profile.position]),
+        );
+
+        const shelterObject = shelter.toObject();
+
+        shelterObject.employees = shelterObject.employees.map((employee) =>
+          employee
+            ? { ...employee, position: positionByUserId.get(String(employee._id)) ?? null }
+            : employee,
+        );
+
         return res.status(200).json({
           success: true,
           accessLevel: "shelterEmployee",
           data: {
-            ...shelter.toObject(),
+            ...shelterObject,
             reviews,
           },
         });
@@ -991,7 +1015,7 @@ class ShelterController {
       {
         $set: {
           shelterId: null,
-          position: "Employee",
+          position: "employee",
           employeeNumber: null,
           hireDate: null,
         },
@@ -1103,6 +1127,10 @@ class ShelterController {
       });
     }
 
+    // checkShelterEmployeePermission already confirmed this is either
+    // superadmin or a valid active Manager of this shelter.
+    const isManagerCaller = req.user.role === "shelterEmployee";
+
     const employee = await User.findById(employeeId);
 
     if (!employee) {
@@ -1123,6 +1151,13 @@ class ShelterController {
       return res.status(400).json({
         success: false,
         message: "User role must be shelterEmployee or vet",
+      });
+    }
+
+    if (isManagerCaller && employee.role === "vet") {
+      return res.status(403).json({
+        success: false,
+        message: "Shelter Managers cannot add veterinarians",
       });
     }
 
@@ -1160,6 +1195,16 @@ class ShelterController {
           employee.role === "vet"
             ? "Active vet profile not found"
             : "Active shelter employee profile not found",
+      });
+    }
+
+    // A Manager may only add an employee who isn't linked to any shelter yet
+    // (superadmin gets the slightly looser "different shelter" check below,
+    // since re-pointing a stray same-shelter link is an admin-level repair).
+    if (isManagerCaller && employeeProfile.shelterId) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee already belongs to a shelter",
       });
     }
 
@@ -1289,6 +1334,28 @@ class ShelterController {
       });
     }
 
+    // checkShelterEmployeePermission already confirmed this is either
+    // superadmin or a valid active Manager of this shelter.
+    const isManagerCaller = req.user.role === "shelterEmployee";
+
+    if (isManagerCaller && employee.role === "vet") {
+      return res.status(403).json({
+        success: false,
+        message: "Shelter Managers cannot remove veterinarians",
+      });
+    }
+
+    if (
+      isManagerCaller &&
+      employee.role === "shelterEmployee" &&
+      String(employeeProfile.position).toLowerCase() === "manager"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Shelter Managers cannot remove another Manager",
+      });
+    }
+
     shelter.employees = shelter.employees.filter(
       (id) => String(id) !== String(employeeId),
     );
@@ -1297,7 +1364,7 @@ class ShelterController {
 
     // Reset Shelter Employee job data after removal.
     if (employee.role === "shelterEmployee") {
-      employeeProfile.position = "Employee";
+      employeeProfile.position = "employee";
 
       employeeProfile.employeeNumber = null;
 
@@ -1809,7 +1876,10 @@ class ShelterController {
       });
     }
 
-    const { publicId } = req.body;
+    // req.params.publicId is the primary source (matches the declared route
+    // DELETE /:id/images/:publicId); req.body.publicId is kept as a fallback
+    // for compatibility during this transition.
+    const publicId = req.params.publicId || req.body.publicId;
 
     if (!publicId || typeof publicId !== "string" || !publicId.trim()) {
       return res.status(400).json({

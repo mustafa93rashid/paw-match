@@ -276,6 +276,34 @@ const verifyEmailUpdateValidation = [
   validate,
 ];
 
+// ==================================================
+// Activate account validation
+// ==================================================
+const activateAccountValidation = [
+  param("token")
+    .trim()
+    .notEmpty()
+    .withMessage("Activation token is required"),
+
+  passwordRules("newPassword", "New password"),
+
+  body("confirmPassword")
+    .notEmpty()
+    .withMessage("Password confirmation is required")
+    .bail()
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error(
+          "Password confirmation does not match the new password",
+        );
+      }
+
+      return true;
+    }),
+
+  validate,
+];
+
 module.exports = {
   signupValidation,
   verifySignupValidation,
@@ -283,6 +311,7 @@ module.exports = {
   changePasswordValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
+  activateAccountValidation,
   requestEmailUpdateValidation,
   verifyEmailUpdateValidation,
 };

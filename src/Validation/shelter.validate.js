@@ -31,6 +31,22 @@ const employeeIdParamValidation = param("employeeId")
   .isMongoId()
   .withMessage("Invalid employee ID");
 
+// Rejects any body field not in the allow-list (400), instead of silently
+// ignoring it — used where a field being accepted at all (e.g. position on
+// addEmployee) would let a caller bypass a permission tier.
+const allowOnlyFields = (allowedFields) =>
+  body().custom((_, { req }) => {
+    const invalidFields = Object.keys(req.body).filter(
+      (field) => !allowedFields.includes(field),
+    );
+
+    if (invalidFields.length > 0) {
+      throw new Error(`Invalid fields provided: ${invalidFields.join(", ")}`);
+    }
+
+    return true;
+  });
+
 const coordinatesPairValidation = body().custom((_, { req }) => {
   const hasLongitude = req.body.longitude !== undefined;
   const hasLatitude = req.body.latitude !== undefined;
@@ -496,6 +512,7 @@ const permanentlyDeleteShelterValidation = [
 
 const addEmployeeValidation = [
   shelterIdValidation,
+  allowOnlyFields(["employeeId"]),
 
   body("employeeId")
     .notEmpty()

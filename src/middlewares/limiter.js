@@ -47,10 +47,40 @@ const verifyEmailUpdateLimiter = rateLimit({
   },
 });
 
+const applicationLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 1 day
+  limit: 20,
+  message: {
+    success: false,
+    message: "Too many application submissions, please try again after 1 day",
+  },
+});
+
+const verifyApplicationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: {
+    success: false,
+    message: "Too many verification attempts. Please try again later.",
+  },
+});
+
+const resendActivationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  message: {
+    success: false,
+    message: "Too many activation email requests. Please try again later.",
+  },
+});
+
 module.exports = {
   signupLimiter,
   signinLimiter,
   verifySignupLimiter,
   requestEmailUpdateLimiter,
   verifyEmailUpdateLimiter,
+  applicationLimiter,
+  verifyApplicationLimiter,
+  resendActivationLimiter,
 };

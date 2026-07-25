@@ -5,7 +5,7 @@ const router = express.Router();
 const asyncHandler = require("../utils/asyncHandler");
 const authController = require("../controllers/auth.controller");  
 const { signupLimiter, signinLimiter, verifySignupLimiter } = require("../middlewares/limiter");
-const { signupValidation, signinValidation, verifySignupValidation, changePasswordValidation, forgotPasswordValidation, resetPasswordValidation } = require("../validation/auth.validate");
+const { signupValidation, signinValidation, verifySignupValidation, changePasswordValidation, forgotPasswordValidation, resetPasswordValidation, activateAccountValidation } = require("../validation/auth.validate");
 const validate = require("../middlewares/validate");
 
 // Register new user
@@ -31,5 +31,8 @@ router.post("/forgot-password", [...forgotPasswordValidation], asyncHandler(auth
 
 // Reset password
 router.post("/reset-password/:token", [...resetPasswordValidation], asyncHandler(authController.resetPassword));
+
+// Activate a staff-application-approved account (sets the applicant's own password for the first time)
+router.post("/activate-account/:token", [...activateAccountValidation], asyncHandler(authController.activateAccount));
 
 module.exports = router;

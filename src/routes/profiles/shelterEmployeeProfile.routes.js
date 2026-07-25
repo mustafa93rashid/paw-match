@@ -17,6 +17,11 @@ router.put("/:userId/work-data", [auth, role(["superadmin"]), updateEmployeeWork
 // get all shelter employee profiles
 router.get("/", [auth, role(["superadmin"])], asyncHandler(shelterEmployeeProfileController.getAll));
 
+// search active, unassigned shelterEmployee accounts — superadmin or an
+// active shelter Manager (any shelter); must be registered before /:userId
+// so "available" isn't captured as a userId param
+router.get("/available", [auth, role(["superadmin", "shelterEmployee"])], asyncHandler(shelterEmployeeProfileController.getAvailableEmployees));
+
 // get shelter employee profile by User ID
 router.get("/:userId", [auth, role(["superadmin"]), getShelterEmployeeByUserIdValidation], asyncHandler(shelterEmployeeProfileController.getOne));
 

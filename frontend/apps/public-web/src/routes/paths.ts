@@ -1,0 +1,28 @@
+/** Central route path constants shared by navigation, footer, and routing. */
+export const paths = {
+  home: "/",
+  shelters: "/shelters",
+  animals: "/animals",
+  animalDetail: (id: string) => `/animals/${id}`,
+  matching: "/matching",
+  adopterProfile: "/profile",
+  veterinarians: "/veterinarians",
+  veterinarianDetail: (userId: string) => `/veterinarians/${userId}`,
+  vetAppointments: "/appointments/vet",
+  newVetAppointment: (vetId: string) => `/appointments/vet/new/${vetId}`,
+  adoptionRequests: "/adoptions",
+  newAdoptionRequest: (animalId: string) => `/adoptions/new/${animalId}`,
+  review: (targetType: "shelter" | "vet", transactionId: string) =>
+    `/reviews/${targetType}/${transactionId}`,
+  notifications: "/notifications",
+  account: "/account",
+  login: "/login",
+  signup: "/signup",
+  signupVerify: "/signup/verify",
+  forgotPassword: "/forgot-password",
+  resetPassword: (token: string) => `/reset-password/${token}`,
+  activateAccount: (token: string) => `/activate-account/${token}`,
+  applyShelterManager: "/apply/shelter-manager",
+  applyVet: "/apply/vet",
+  applyVerify: "/apply/verify",
+} as const;
