@@ -23,7 +23,20 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookies());
 app.use(xssSanitize);
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://paw-match-dashboard.onrender.com",
+      "https://paw-match-frontend.onrender.com",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 //=========================================================================
 // API Routes
 //=========================================================================
